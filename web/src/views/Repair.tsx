@@ -34,7 +34,7 @@ function Flow() {
       />
     )
   }
-  const reasonColors = ['#c9604a', '#e8795f', '#fc967e']
+  const reasonColors = ['#0033a0', '#1f6fd1', '#2e8fe8']
   let ry = qY - 6
   const reasons = f.reasons.map((r, i) => {
     const h = Math.max(r.count * k, 4)
@@ -53,8 +53,8 @@ function Flow() {
   return (
     <Card eyebrow="Decision process" title="What was kept, and why" right={<Pill tone="neutral">Measured</Pill>}>
       <svg className="rp-flow" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Flow from 2,000 expected flight-hours to usable and quarantined, with reasons and repairs">
-        {curve(xA + NW, 0, xB, 0, uH, '#365d49')}
-        {curve(xA + NW, uH, xB, qY, qH, '#c9604a')}
+        {curve(xA + NW, 0, xB, 0, uH, '#00857c')}
+        {curve(xA + NW, uH, xB, qY, qH, '#0033a0')}
         <rect x={xA} y={0} width={NW} height={uH + qH} rx="3" fill="var(--navy)" />
         <rect x={xB} y={0} width={NW} height={uH} rx="3" fill="var(--green)" />
         <rect x={xB} y={qY} width={NW} height={qH} rx="3" fill="var(--coral-deep)" />

@@ -10,9 +10,9 @@ import '../styles/impact.css'
 type M = 'lr' | 'rf' | 'hgb'
 const COLS = 19
 const CELL = 22
-const C_TP = '#365d49'
+const C_TP = '#00857c'
 const C_FN = '#e0a526'
-const C_FP = '#fc967e'
+const C_FP = '#2e8fe8'
 const C_TN = '#c9d0cc'
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
@@ -180,7 +180,7 @@ export default function Impact() {
                 fill={dotColor(r.y, i < k)}
               />
             ))}
-            <path d={line} fill="none" stroke="#17343d" strokeWidth={2.5} strokeLinejoin="round" />
+            <path d={line} fill="none" stroke="#001e60" strokeWidth={2.5} strokeLinejoin="round" />
           </svg>
           <ul className="im-legend">
             <li><i style={{ background: C_TP }} />Disruption, flagged in time <b className="mono">{cm.tp}</b></li>

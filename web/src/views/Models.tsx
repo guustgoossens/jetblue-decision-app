@@ -292,9 +292,9 @@ function Sweep() {
     return Math.round(Math.min(1, Math.max(0, (vb - P) / (W - 2 * P))) * 100)
   }
   const series: { name: string; color: string; f: (p: (typeof pts)[number]) => number }[] = [
-    { name: 'Precision', color: '#fc967e', f: (p) => p.p },
-    { name: 'Recall', color: '#365d49', f: (p) => p.r },
-    { name: 'Balanced accuracy', color: '#17343d', f: (p) => p.b },
+    { name: 'Precision', color: '#2e8fe8', f: (p) => p.p },
+    { name: 'Recall', color: '#00857c', f: (p) => p.r },
+    { name: 'Balanced accuracy', color: '#001e60', f: (p) => p.b },
   ]
   return (
     <Card eyebrow="Cut-off sweep" title="Metrics by cut-off">

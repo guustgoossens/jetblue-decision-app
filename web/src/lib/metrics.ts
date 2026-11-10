@@ -1,7 +1,7 @@
 import type { ScoreKey, ValidationRow } from './types'
 
 export const SCORE_KEYS: ScoreKey[] = ['lr', 'rf', 'hgb', 'dummy']
-export const MODEL_COLOR: Record<ScoreKey, string> = { lr: '#17343d', rf: '#fc967e', hgb: '#365d49', dummy: '#b3bcbb' }
+export const MODEL_COLOR: Record<ScoreKey, string> = { lr: '#001e60', rf: '#2e8fe8', hgb: '#00857c', dummy: '#b7c3d3' }
 
 export function confusion(rows: ValidationRow[], key: ScoreKey, t: number) {
   let tp = 0, fp = 0, tn = 0, fn = 0

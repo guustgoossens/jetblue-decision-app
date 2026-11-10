@@ -62,7 +62,7 @@ export default function Diagnosis() {
           <svg viewBox="0 0 760 380" role="img" aria-label={rev ? 'One root cause feeding four effects' : 'Three disconnected problems'}>
             <defs>
               <marker id="dg-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-                <path d="M0 0 L10 5 L0 10 z" fill="#17343d" />
+                <path d="M0 0 L10 5 L0 10 z" fill="#001e60" />
               </marker>
             </defs>
 

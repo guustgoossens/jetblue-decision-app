@@ -41,7 +41,7 @@ export function PlaneLoader() {
         <svg className="gl__map" viewBox="0 0 960 58" preserveAspectRatio="none" aria-hidden>
           <g className="gl__band">{dots}<g transform="translate(480 0)">{dots}</g></g>
         </svg>
-        <svg className="gl__plane" width="30" height="30" viewBox="0 0 24 24" aria-hidden><path fill="#17343d" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" transform="rotate(90 12 12)" /></svg>
+        <svg className="gl__plane" width="30" height="30" viewBox="0 0 24 24" aria-hidden><path fill="#001e60" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" transform="rotate(90 12 12)" /></svg>
       </div>
       <span className="gl__txt">Genie is checking the tables…</span>
     </div>
