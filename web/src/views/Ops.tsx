@@ -650,19 +650,28 @@ function Cloud({ x, y, s, cls }: { x: number; y: number; s: number; cls: string 
   )
 }
 
-/** Side-view airliner, nose to the right, ~70 x 32 units around the origin. */
+/** Side-view narrow-body airliner, nose to the right, ~98 x 44 units (tail at x 0, nose at x 96). */
 function Plane() {
   return (
     <g className="sky-craft">
-      <path className="sky-trail" d="M-90 1 H0" />
-      <path className="sky-wing-far" d="M30 -3 L23 -10 L28 -10 L38 -3Z" />
-      <path className="sky-tail" d="M3 -4 L-3 -19 L7 -19 L17 -4Z" />
-      <path className="sky-body" d="M5 -5 H55 Q67 -5 70 0 Q67 5 55 5 H5 Q0 5 0 0 Q0 -5 5 -5Z" />
-      <path className="sky-stab" d="M1 1 L-6 6 L5 6 L13 2Z" />
-      {Array.from({ length: 8 }, (_, i) => <circle key={i} className="sky-win" cx={20 + i * 4.4} cy="-1.2" r="0.95" />)}
-      <path className="sky-cockpit" d="M61 -2.6 H65 Q68 -1.4 67 -0.2 H61Z" />
-      <path className="sky-wing" d="M27 2 L16 14 L24 14 L42 3Z" />
-      <ellipse className="sky-engine" cx="29" cy="7.2" rx="5.2" ry="2.3" />
+      <path className="sky-trail" d="M-90 -1 H2" />
+      <path className="sky-wing-far" d="M54 -4.6 L45 -4.6 L35 -12.5 L39.5 -12.5Z" />
+      <path className="sky-stab-far" d="M15 -3 L6 -3 L1 -7.5 L4.5 -7.5Z" />
+      <path className="sky-tail" d="M5 -4.6 L1.5 -23.5 H8 L21 -8 Q24.5 -5.4 31 -5 Z" />
+      <path className="sky-body" d="M2 -3.6 L12 -5 H78 C86 -5 92 -3.2 95.5 -0.4 C96.2 0.4 95.6 1.6 94 2.4 C90 4.4 85 5 80 5 H24 C16 5 8 2 2 -1.2 Z" />
+      <path className="sky-belly" d="M16 2.4 H94.6 C90 4.4 85 5 80 5 H24 C20.5 5 18 3.9 16 2.4Z" />
+      <path className="sky-stripe" d="M20 0.9 H92.5" />
+      <rect className="sky-door" x="16.4" y="-3.8" width="2.6" height="5.4" rx="0.8" />
+      <rect className="sky-door" x="82.4" y="-3.8" width="2.6" height="5.4" rx="0.8" />
+      {Array.from({ length: 16 }, (_, i) => <rect key={i} className="sky-win" x={22.4 + i * 3.6} y="-2.6" width="1.5" height="2" rx="0.7" />)}
+      <path className="sky-cockpit" d="M86.4 -3.6 H90.6 Q93.2 -2.6 93.9 -1.3 H86.8Z" />
+      <path className="sky-stab" d="M16 0.6 L5 1.2 L-2 7 L3.5 7Z" />
+      <path className="sky-wing" d="M58 2.2 L41 3.4 L28 18.5 L33.5 18.5Z" />
+      <path className="sky-winglet" d="M28 18.5 L26.6 21.6 H28.6 L33.5 18.5Z" />
+      <path className="sky-pylon" d="M48.5 6.6 L50.5 3.2 H56.5 L56 6.6Z" />
+      <path className="sky-engine" d="M45.5 6.4 H56.5 Q60.6 6.4 61 9 Q60.6 11.6 56.5 11.6 H46 Q44 11.6 44 9 Q44 6.4 45.5 6.4Z" />
+      <ellipse className="sky-intake" cx="60.4" cy="9" rx="0.9" ry="2.4" />
+      <path className="sky-exhaust" d="M44.2 7.4 L41 9 L44.2 10.6Z" />
     </g>
   )
 }

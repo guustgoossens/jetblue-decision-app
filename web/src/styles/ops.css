@@ -214,9 +214,15 @@
 /* the aircraft: white fuselage, navy tail, blue windows */
 .sky-body { fill: #ffffff; stroke: #001e60; stroke-width: .7; }
 .sky-tail { fill: #001e60; }
-.sky-stab, .sky-wing { fill: #0a2e7a; }
-.sky-wing-far { fill: #94a3ba; }
-.sky-engine { fill: #d9e2ee; stroke: #001e60; stroke-width: .6; }
+.sky-stab, .sky-wing, .sky-winglet { fill: #0a2e7a; }
+.sky-wing-far, .sky-stab-far { fill: #94a3ba; }
+.sky-belly { fill: #dfe6f0; }
+.sky-stripe { stroke: #2e8fe8; stroke-width: .7; }
+.sky-door { fill: none; stroke: #9aa9be; stroke-width: .4; }
+.sky-pylon { fill: #c4cfdd; }
+.sky-engine { fill: #e8eef5; stroke: #001e60; stroke-width: .6; }
+.sky-intake { fill: #0b1b3a; }
+.sky-exhaust { fill: #6b7a90; }
 .sky-win { fill: #2e8fe8; }
 .sky-cockpit { fill: #0b1b3a; }
 .sky-trail { stroke: #fff; stroke-width: 1.6; stroke-linecap: round; opacity: .7; stroke-dasharray: 90; }
@@ -224,7 +230,7 @@
 .sky--storm .sky-body { stroke: #9fb6e0; }
 .sky--storm .sky-win { fill: #ffe58a; }
 
-.sky-plane { transform: translate(165px, 60px); } /* the aircraft holds still; the world moves past it */
+.sky-plane { transform: translate(153px, 59px); } /* the aircraft holds still; the world moves past it */
 
 .sky-wind path { stroke: #fff; stroke-width: 1.2; stroke-linecap: round; opacity: 0; animation: sky-wind 1.8s linear infinite; }
 .sky--rough .sky-wind path { stroke: #e7edf5; }
