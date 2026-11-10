@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { data } from '../lib/data'
 import { predict, baseline, contributions } from '../lib/scoring'
 import { useApp, REGIONS } from '../lib/store'
@@ -25,6 +25,16 @@ function suggest(x: Features): { action: string; owner: string } {
   if (x.x3 <= 15) return { action: 'Protect turnaround, add ramp crew', owner: 'Owner: ramp supervisor' }
   if (x.x1 >= 45) return { action: 'Re-sequence departures', owner: 'Owner: ops control' }
   return { action: 'Duty manager review', owner: 'Owner: duty manager' }
+}
+
+const MIN = 60000
+const tms = (ts: string) => new Date(ts).getTime()
+const hhmm = (t: number) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC'
+
+const REASON: Record<string, string> = {
+  policy_not_allowed: 'Not permitted for model use',
+  x1_unparseable: 'Queue depth unreadable',
+  no_observation_at_decision_time: 'No timely observation',
 }
 
 function download(name: string, text: string) {
@@ -60,19 +70,51 @@ export default function Ops() {
     [],
   )
 
+  const span = useMemo(() => {
+    const ts = data.queue.map((r) => tms(r.observedAt))
+    return { t0: Math.min(...ts), t1: Math.max(...ts) }
+  }, [])
+  const winMin = data.business.decisionWindowMin
+  const [now, setNow] = useState(span.t0)
+  const [playing, setPlaying] = useState(false)
+  const nowRef = useRef(now)
+  nowRef.current = now
+  useEffect(() => {
+    if (!playing) return
+    const id = setInterval(() => {
+      if (nowRef.current + MIN >= span.t1) { setNow(span.t1); setPlaying(false) } else setNow(nowRef.current + MIN)
+    }, 250)
+    return () => clearInterval(id)
+  }, [playing, span.t1])
+  const togglePlay = () => {
+    if (!playing && now >= span.t1) setNow(span.t0)
+    setPlaying((v) => !v)
+  }
+
+  const issues = useMemo(
+    () =>
+      data.lineage.rejected
+        .filter((x) => x.split === 'blind' && x.observedAt)
+        .map((x) => ({ id: x.id, segment: x.id.split(':')[0], t: tms(x.observedAt as string), reason: REASON[x.reason] ?? x.reason }))
+        .sort((a, b) => a.t - b.t),
+    [],
+  )
+  const winIssues = issues.filter((i) => i.t >= now && i.t <= now + winMin * MIN && regions.includes(i.segment))
+
   const view = useMemo(() => {
-    const inRegion = rows.filter((r) => regions.includes(r.segment))
+    const inWin = rows.filter((r) => { const t = tms(r.observedAt); return t >= now && t <= now + winMin * MIN })
+    const inRegion = inWin.filter((r) => regions.includes(r.segment))
     const flagged = inRegion.filter((r) => r.p >= cutoff)
     const actions = flagged.slice(0, capacity)
     const actionIds = new Set(actions.map((r) => r.id))
     const byRegion = REGIONS.map((g) => {
-      const all = rows.filter((r) => r.segment === g)
+      const all = inWin.filter((r) => r.segment === g)
       const fl = all.filter((r) => r.p >= cutoff)
       const act = actions.filter((r) => r.segment === g)
       return { g, total: all.length, flagged: fl.length, acted: act.length, avg: all.length ? all.reduce((s, r) => s + r.p, 0) / all.length : 0 }
     })
     return { inRegion, flagged, actions, actionIds, byRegion }
-  }, [rows, regions, cutoff, capacity])
+  }, [rows, regions, cutoff, capacity, now, winMin])
 
   useEffect(() => {
     if (selectedId == null && rows.length) setSelectedId(rows[0].id)
@@ -80,7 +122,6 @@ export default function Ops() {
 
   const selected = rows.find((r) => r.id === selectedId) ?? rows[0]
   const overflow = Math.max(0, view.flagged.length - view.actions.length)
-  const capIdx = view.actions.length ? rows.indexOf(view.actions[view.actions.length - 1]) : -1
 
   const random = () => {
     if (!view.actions.length) return
@@ -104,6 +145,21 @@ export default function Ops() {
     >
       <div className="q-layout">
         <div className="q-left">
+          <Card eyebrow="Decision clock" title={`Now ${hhmm(now)}, looking ${winMin} min ahead`}>
+            <div className="ops-clock">
+              <button className="btn btn--primary" onClick={togglePlay}>{playing ? 'Pause' : 'Auto-play'}</button>
+              <input
+                type="range" className="ops-range" aria-label="Current time"
+                min={0} max={Math.round((span.t1 - span.t0) / MIN)} step={1}
+                value={Math.round((now - span.t0) / MIN)}
+                onChange={(e) => { setPlaying(false); setNow(span.t0 + Number(e.target.value) * MIN) }}
+              />
+              <span className="mono ops-clock__t">{hhmm(now)}</span>
+            </div>
+            <Timeline rows={rows} issues={issues} span={span} now={now} winMs={winMin * MIN} onSet={(t) => { setPlaying(false); setNow(t) }} />
+            <p className="q-count mono">Blind window {hhmm(span.t0)} to {hhmm(span.t1)}. The desk sees only what is due in the next {winMin} minutes. Risks are predictions.</p>
+          </Card>
+
           <Card eyebrow="Desk settings" title="Capacity, regions and cut-off">
             <div className="ops-set">
               <Slider label="Interventions the desk can handle this hour" value={capacity} min={5} max={80} step={1} onChange={setCapacity} format={(v) => num(v)} />
@@ -117,21 +173,22 @@ export default function Ops() {
               ))}
             </div>
             <div className="ops-stats">
-              <Stat label="Flagged above cut-off" value={num(view.flagged.length)} sub={`of ${num(view.inRegion.length)} in view`} />
+              <Stat label="Flagged in window" value={num(view.flagged.length)} sub={`of ${num(view.inRegion.length)} due in the next ${winMin} min`} />
               <Stat label="Action list" value={num(view.actions.length)} sub={`capacity ${num(capacity)}`} tone="coral" />
               <Stat label="Flagged, over capacity" value={num(overflow)} sub={overflow ? 'monitor, cannot act' : 'none'} />
             </div>
           </Card>
 
-          <Card eyebrow="All 342 upcoming flight-hours" title="Sorted by risk, with the capacity line">
+          <Card eyebrow="All 342 upcoming flight-hours" title="Sorted by risk, current window lit">
             <div className="ops-grid" role="list" aria-label="Flight-hours sorted by risk">
-              {rows.map((r, i) => {
+              {rows.map((r) => {
                 const inView = regions.includes(r.segment)
-                const cls = !inView ? 'is-off' : view.actionIds.has(r.id) ? 'is-act' : r.p >= cutoff ? 'is-over' : 'is-mon'
+                const tt = tms(r.observedAt)
+                const inWin = tt >= now && tt <= now + winMin * MIN
+                const cls = !inView || !inWin ? 'is-off' : view.actionIds.has(r.id) ? 'is-act' : r.p >= cutoff ? 'is-over' : 'is-mon'
                 return (
                   <span key={r.id} style={{ display: 'contents' }}>
                     <button role="listitem" className={'ops-dot ' + cls + (r.id === selected?.id ? ' is-sel' : '')} title={`${r.id}: ${pct1(r.p)}`} aria-label={`${r.id} risk ${pct1(r.p)}`} onClick={() => setSelectedId(r.id)} />
-                    {i === capIdx && <i className="ops-cap" title="Capacity line" />}
                   </span>
                 )
               })}
@@ -140,7 +197,7 @@ export default function Ops() {
               <li><i className="q-dot" style={{ background: 'var(--coral)' }} />Action list</li>
               <li><i className="q-dot" style={{ background: 'var(--navy)' }} />Flagged, over capacity</li>
               <li><i className="q-dot" style={{ background: 'var(--line)' }} />Monitor</li>
-              <li><i className="q-dot" style={{ background: 'var(--line-soft)', border: '1px solid var(--line)' }} />Region hidden</li>
+              <li><i className="q-dot" style={{ background: 'var(--line-soft)', border: '1px solid var(--line)' }} />Outside window or region</li>
             </ul>
           </Card>
 
@@ -158,9 +215,26 @@ export default function Ops() {
             </div>
           </Card>
 
+          <Card eyebrow="Issues" title="No model score: act on manual check">
+            <p className="q-count mono">{winIssues.length} in this window, {issues.length} across the blind set. These flight-hours had no trustworthy signal, so the model cannot rank them.</p>
+            {winIssues.length ? (
+              <ul className="ops-issues">
+                {winIssues.map((i) => (
+                  <li key={i.id}>
+                    <span className="mono">{i.id}</span>
+                    <span>{i.reason}</span>
+                    <span className="mono ops-owner">in {Math.max(0, Math.round((i.t - now) / MIN))} min</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="q-empty">No unscored flight-hour in this window.</p>
+            )}
+          </Card>
+
           <Card
             eyebrow="Intervention queue"
-            title={`Top ${view.actions.length} flight-hours by risk`}
+            title={`Next ${winMin} min: top ${view.actions.length} by risk`}
             right={
               <div className="q-actions">
                 <button className="btn" onClick={random}>Random</button>
@@ -177,7 +251,7 @@ export default function Ops() {
                   <tr>
                     <th>#</th>
                     <th>Flight-hour</th>
-                    <th>Observed</th>
+                    <th>Due</th>
                     <th className="q-num">Queue</th>
                     <th className="q-num">Weather</th>
                     <th className="q-num">Buffer</th>
@@ -192,7 +266,7 @@ export default function Ops() {
                       <tr key={r.id} className={'is-click' + (r.id === selected?.id ? ' is-on' : '')} onClick={() => setSelectedId(r.id)}>
                         <td className="mono">{i + 1}</td>
                         <td className="mono">{r.id}</td>
-                        <td className="mono">{prettyTs(r.observedAt)}</td>
+                        <td className="mono">in {Math.max(0, Math.round((tms(r.observedAt) - now) / MIN))} min<div className="ops-owner">{hhmm(tms(r.observedAt))}</div></td>
                         <td className="q-num mono">{num(r.x1, 0)}</td>
                         <td className="q-num mono">{num(r.x2, 2)}</td>
                         <td className="q-num mono">{num(r.x3, 0)}</td>
@@ -207,7 +281,7 @@ export default function Ops() {
                     )
                   })}
                   {!view.actions.length && (
-                    <tr><td colSpan={8} className="q-empty">No flight-hour above the cut-off in these regions.</td></tr>
+                    <tr><td colSpan={8} className="q-empty">No flight-hour above the cut-off due in this window.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -404,5 +478,34 @@ function Detail({ row, cutoff }: { row: QRow; cutoff: number }) {
         <Note>What-if scores are predicted risk, not causal effects: they do not show that acting prevents a disruption.</Note>
       </Card>
     </div>
+  )
+}
+
+function Timeline({ rows, issues, span, now, winMs, onSet }: {
+  rows: QRow[]
+  issues: { id: string; t: number }[]
+  span: { t0: number; t1: number }
+  now: number
+  winMs: number
+  onSet: (t: number) => void
+}) {
+  const W = 600, H = 56
+  const range = Math.max(1, span.t1 - span.t0)
+  const x = (t: number) => ((t - span.t0) / range) * W
+  const set = (e: React.MouseEvent<SVGSVGElement>) => {
+    const b = e.currentTarget.getBoundingClientRect()
+    const f = Math.min(1, Math.max(0, (e.clientX - b.left) / b.width))
+    onSet(Math.round((span.t0 + f * range) / MIN) * MIN)
+  }
+  const ws = Math.max(0, x(now)), we = Math.min(W, x(now + winMs))
+  return (
+    <svg className="ops-tl" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Timeline of blind flight-hours by risk" onClick={set} onMouseMove={(e) => { if (e.buttons === 1) set(e) }}>
+      <rect x={ws} y={0} width={Math.max(2, we - ws)} height={H} fill="var(--coral-soft)" />
+      <line x1={ws} x2={ws} y1={0} y2={H} stroke="var(--coral-deep)" strokeWidth={2} />
+      {issues.map((i) => <rect key={i.id} x={x(i.t) - 1} y={H - 8} width={2} height={6} fill="var(--muted)" />)}
+      {rows.map((r) => (
+        <circle key={r.id} cx={x(tms(r.observedAt))} cy={4 + (1 - r.p) * (H - 20)} r={2} fill={r.p >= 0.5 ? 'var(--coral)' : 'var(--navy)'} opacity={0.35 + 0.65 * r.p} />
+      ))}
+    </svg>
   )
 }

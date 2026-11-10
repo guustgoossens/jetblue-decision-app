@@ -68,7 +68,14 @@ export default function Impact() {
   const implied = cm.recall * a.preventRate
   const avoided = biz.delaysPerWeek * implied
   const targetN = biz.delaysPerWeek * biz.targetReduction
+  // Interventions scale with disruptions: on validation the cut-off raises cm.contacted flags per (tp+fn) real disruptions.
+  const flagsPerDisruption = cm.tp + cm.fn > 0 ? cm.contacted / (cm.tp + cm.fn) : 0
+  const flagsPerWeek = biz.delaysPerWeek * flagsPerDisruption
   const meets = avoided >= targetN
+
+  const weeklyAt = (p: number) =>
+    biz.delaysPerWeek * cm.recall * p * a.disruptionCost - flagsPerWeek * a.interventionCost
+  const weeklyNet = weeklyAt(a.preventRate)
 
   const presets: { label: string; t: number }[] = [
     { label: '0.50 logged', t: LOGGED_CUTOFF },
@@ -103,6 +110,33 @@ export default function Impact() {
       title="What does the cut-off trade, and what is it worth?"
       lede="The cut-off decides which flight-hours are flagged for intervention. Drag across the grid or move the slider: every figure is recomputed on the 342 validation flight-hours, whose outcomes are known. Dollar figures are a scenario on editable assumptions."
     >
+      <section className="im-hero">
+        <div className="im-hero__head">
+          <span className="eyebrow">Weekly scenario · editable assumptions, not a result</span>
+          <Pill tone="amber">Scenario</Pill>
+        </div>
+        <div className="im-hero__nums">
+          <div><b className="mono">{num(avoided, 1)}</b><span>fewer delays a week, against a target of {num(targetN, 0)}</span></div>
+          <div><b className="mono">{usd(weeklyNet)}</b><span>net value a week</span></div>
+          <div><b className="mono">{usd(weeklyNet * 52)}</b><span>a year (x 52), scenario only</span></div>
+        </div>
+        <div className="im-sens" aria-label="Sensitivity to prevent share">
+          <span className="eyebrow">Weekly value if the prevent share is</span>
+          {[0.1, 0.2, 0.3, 0.5].map((p) => {
+            const v = weeklyAt(p)
+            return (
+              <button key={p} type="button" className={'im-sens__c' + (Math.abs(a.preventRate - p) < 0.005 ? ' is-on' : '')} onClick={() => setAssumption('preventRate', p)}>
+                <small>{pct(p)}</small>
+                <b className="mono">{usd(v)}</b>
+              </button>
+            )
+          })}
+        </div>
+        <p className="im-hero__note">
+          Weekly net = {biz.delaysPerWeek} delays x recall {pct1(cm.recall)} x prevent share x cost per disruption, minus the interventions a week ({num(flagsPerWeek, 1)} flags: {num(flagsPerDisruption, 2)} flags per real disruption at this cut-off on validation, times {biz.delaysPerWeek} delays) x cost per intervention. Click a share to set it.
+        </p>
+      </section>
+
       <div className="im-top">
         <Card
           eyebrow="Validation flight-hours"

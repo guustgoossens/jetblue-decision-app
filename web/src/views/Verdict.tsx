@@ -4,7 +4,7 @@ import { Band, Card, Pill, Seg, Slider, Stat } from '../components/ui';
 import { data, champion, dummy } from '../lib/data';
 import { bestBalanced, confusion } from '../lib/metrics';
 import { LOGGED_CUTOFF, useApp } from '../lib/store';
-import { num, pct, pct1 } from '../lib/format';
+import { num, pct, pct1, usd } from '../lib/format';
 import { recommendation, storyline } from '../lib/narrative';
 import '../styles/verdict.css';
 
@@ -31,6 +31,7 @@ const ROW_H = 58;
 export default function Verdict() {
   const cutoff = useApp((s) => s.cutoff);
   const setCutoff = useApp((s) => s.setCutoff);
+  const a = useApp((s) => s.assumptions);
   const [metric, setMetric] = useState<Metric>('balancedAccuracy');
 
   const best = useMemo(() => bestBalanced(data.validation, 'lr'), []);
@@ -56,6 +57,17 @@ export default function Verdict() {
     return { c, n: contacted.length, segments };
   }, [cutoff]);
 
+  const quarters = useMemo(() => {
+    const sorted = [...data.validation].sort((p, q) => q.lr - p.lr);
+    const n = sorted.length;
+    return [0, 1, 2, 3].map((i) => {
+      const part = sorted.slice(Math.floor((i * n) / 4), Math.floor(((i + 1) * n) / 4));
+      const hits = part.filter((r) => r.y === 1).length;
+      return { label: ['Top quarter', 'Second', 'Third', 'Bottom quarter'][i], n: part.length, rate: part.length ? hits / part.length : 0 };
+    });
+  }, []);
+  const weeklyAvoided = data.business.delaysPerWeek * stats.c.recall * a.preventRate;
+  const weeklyCost = weeklyAvoided * a.disruptionCost;
   const nearly = (a: number, b: number) => Math.abs(a - b) < 0.005;
   const total = data.queue.length;
   const eligible = data.funnel.eligible;
@@ -89,7 +101,7 @@ export default function Verdict() {
           </p>
         </div>
         <aside className="verdict-hero__steps" aria-label="The demo">
-          <div className="verdict-steps__head">The demo · 01 — 04</div>
+          <div className="verdict-steps__head">The demo · 01 to 04</div>
           <ol>
             {storyline.map((s, i) => {
               const to = str(s, 'to', 'path', 'href', 'route') || '/';
@@ -122,6 +134,43 @@ export default function Verdict() {
           <Stat label="Flagged for intervention" value={String(stats.n)} sub={`of ${total} blind flight-hours at cut-off ${num(cutoff, 2)}`} tone="coral" />
           <Stat label="Flagged that were disruptions" value={pct(stats.c.precision)} sub="Precision on validation" />
         </div>
+
+        <Card eyebrow="One page for the C-suite" title="Four lines to take into the room" right={<Pill tone="amber">Scenario</Pill>}>
+          <div className="verdict-c">
+            <div className="verdict-c__line">
+              <b className="mono">{biz.delaysPerWeek} → {num(biz.delaysPerWeek * (1 - biz.targetReduction), 0)}</b>
+              <span>delays a week, today against the target, both from discovery.</span>
+            </div>
+            <div className="verdict-c__line">
+              <b className="mono">{pct(stats.c.recall)}</b>
+              <span>of disruptions caught at cut-off {num(cutoff, 2)} on validation, {pct(stats.c.precision)} of flags right, {num(stats.c.contactRate * 100, 1)} flags per 100 flight-hours.</span>
+            </div>
+            <div className="verdict-c__line">
+              <b className="mono">{usd(weeklyCost)}</b>
+              <span>
+                a week of disruption cost avoided before intervention costs, at {pct(a.preventRate)} prevented and {usd(a.disruptionCost)} per disruption. Scenario on editable assumptions, not a result.{' '}
+                <NavLink to="/impact">Edit on Impact ↗</NavLink>
+              </span>
+            </div>
+            <div className="verdict-c__line">
+              <b className="mono">{biz.latencyNowMin}+ → &lt;{biz.latencyNeededMin} min</b>
+              <span>data latency: the upstream fix the pilot must prove.</span>
+            </div>
+          </div>
+        </Card>
+
+        <Card eyebrow="Ranking quality" title="Observed disruption rate by risk quartile, validation">
+          <div className="verdict-q">
+            {quarters.map((q) => (
+              <div key={q.label} className="verdict-q__col">
+                <span className="mono">{pct1(q.rate)}</span>
+                <div className="verdict-q__bar"><i style={{ height: `${Math.max(2, q.rate * 100)}%` }} /></div>
+                <small>{q.label}<br />{q.n} flight-hours</small>
+              </div>
+            ))}
+          </div>
+          <p className="verdict-note">Act on the top of the list.</p>
+        </Card>
 
         <Card eyebrow="The dashboard that arrives too late" title="Two measurements, both say the signal is late">
           <div className="verdict-late">

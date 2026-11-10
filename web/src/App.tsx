@@ -10,6 +10,7 @@ import Diagnosis from './views/Diagnosis'
 import Meddpicc from './views/Meddpicc'
 import Repair from './views/Repair'
 import Models from './views/Models'
+import Experiment from './views/Experiment'
 
 const ic = (d: ReactNode) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{d}</svg>
@@ -22,20 +23,24 @@ const ICONS = {
   meddpicc: ic(<><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>),
   repair: ic(<><path d="M14.5 6.5a4 4 0 0 0-5 5L4 17l3 3 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z" /></>),
   models: ic(<><path d="M4 20V4M4 20h16" /><path d="m7 15 4-5 3 3 5-7" /></>),
+  experiment: ic(<><path d="M9.5 4h5M10.5 4v5.5L5 19a1.2 1.2 0 0 0 1 1.8h12a1.2 1.2 0 0 0 1-1.8l-5.5-9.5V4" /><path d="M7.5 15h9" /></>),
   genie: ic(<><path d="M5 5h14v10H9l-4 4z" /><path d="M9 9.5h6M9 12h4" /></>),
 }
 
 const NAV: { heading?: string; items: { to: string; label: string; icon: ReactNode; end?: boolean }[] }[] = [
-  { heading: 'Decide', items: [
+  { heading: 'CIO lane', items: [
     { to: '/', label: 'CIO verdict', icon: ICONS.verdict, end: true },
-    { to: '/ops', label: 'Ops desk', icon: ICONS.queue },
     { to: '/impact', label: 'Impact & cut-off', icon: ICONS.cutoff },
+  ] },
+  { heading: 'Ops lane', items: [
+    { to: '/ops', label: 'Ops desk', icon: ICONS.queue },
   ] },
   { heading: 'The case', items: [
     { to: '/diagnosis', label: 'Diagnosis', icon: ICONS.diagnosis },
     { to: '/meddpicc', label: 'MEDDPICC', icon: ICONS.meddpicc },
+    { to: '/experiment', label: 'Experiment', icon: ICONS.experiment },
   ] },
-  { heading: 'Trust', items: [
+  { heading: 'Data team', items: [
     { to: '/repair', label: 'Signal repair', icon: ICONS.repair },
     { to: '/models', label: 'Model evidence', icon: ICONS.models },
     { to: '/genie', label: 'Ask Genie', icon: ICONS.genie },
@@ -43,16 +48,17 @@ const NAV: { heading?: string; items: { to: string; label: string; icon: ReactNo
 ]
 const PAGE_NAMES: Record<string, string> = {
   '/': 'CIO verdict', '/ops': 'Ops desk', '/impact': 'Impact & cut-off', '/diagnosis': 'Diagnosis',
-  '/meddpicc': 'MEDDPICC', '/repair': 'Signal repair', '/models': 'Model evidence', '/genie': 'Ask Genie',
+  '/meddpicc': 'MEDDPICC', '/experiment': 'Experiment', '/repair': 'Signal repair', '/models': 'Model evidence', '/genie': 'Ask Genie',
 }
 
 export default function App() {
   const { pathname } = useLocation()
   const [collapsed, setCollapsed] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const server = useApp((s) => s.server)
   const setServer = useApp((s) => s.setServer)
 
-  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+  useEffect(() => { window.scrollTo(0, 0); setMenuOpen(false) }, [pathname])
   useEffect(() => {
     let live = true
     fetch('/api/health')
@@ -66,7 +72,8 @@ export default function App() {
   const statusText = server === 'online' ? 'Champion model online' : server === 'browser' ? 'Scoring in browser' : 'Checking server'
 
   return (
-    <div className={`shell ${collapsed ? 'is-collapsed' : ''}`}>
+    <div className={`shell ${collapsed ? 'is-collapsed' : ''} ${menuOpen ? 'is-menu' : ''}`}>
+      <div className="scrim" onClick={() => setMenuOpen(false)} aria-hidden />
       <aside className="side">
         <div className="side__brand">
           <span className="side__mark" aria-hidden><i /></span>
@@ -96,6 +103,9 @@ export default function App() {
       </aside>
       <div className="main">
         <header className="topbar">
+          <button type="button" className="menu-btn" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
           <div className="crumb"><span>JetBlue Disruption Lab</span><span className="crumb__sep">/</span><strong>{PAGE_NAMES[pathname] ?? ''}</strong></div>
           <div className="topbar__right">
             <span className="topbar__meta">Validation · {validationN} flight-hours</span>
@@ -110,6 +120,7 @@ export default function App() {
             <Route path="/genie" element={<Genie />} />
             <Route path="/diagnosis" element={<Diagnosis />} />
             <Route path="/meddpicc" element={<Meddpicc />} />
+            <Route path="/experiment" element={<Experiment />} />
             <Route path="/repair" element={<Repair />} />
             <Route path="/models" element={<Models />} />
             <Route path="*" element={<Verdict />} />

@@ -174,3 +174,16 @@
   .diagnosis-prob, .diagnosis-root, .diagnosis-conn, .diagnosis-eff { transition: none !important; }
   .diagnosis-shift__arrow svg { animation: none; stroke-dashoffset: 0; }
 }
+
+.verdict-c { display: grid; gap: 12px; }
+.verdict-c__line { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.verdict-c__line:first-child { border-top: 0; }
+.verdict-c__line b { font-size: 28px; font-weight: 500; }
+.verdict-c__line a { color: var(--coral-deep); font-weight: 600; }
+.verdict-q { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: end; }
+.verdict-q__col { display: grid; gap: 6px; justify-items: center; text-align: center; }
+.verdict-q__bar { width: 100%; height: 150px; display: flex; align-items: flex-end; background: var(--tint); border-radius: 8px; overflow: hidden; }
+.verdict-q__bar i { display: block; width: 100%; background: var(--navy); }
+.verdict-q__col:first-child .verdict-q__bar i { background: var(--coral); }
+.verdict-q__col small { color: var(--muted); font-size: 12px; }
+@media (max-width: 700px) { .verdict-c__line { grid-template-columns: 1fr; gap: 4px; } }

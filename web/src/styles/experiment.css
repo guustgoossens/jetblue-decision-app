@@ -1,0 +1,25 @@
+/* Experiment view (ex-) */
+.ex-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.ex-bar__note{font-size:12px;color:var(--muted);letter-spacing:.04em}
+.ex-copy{font:inherit;font-size:13px;font-weight:500;padding:8px 16px;border-radius:999px;border:1px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer;min-width:112px;transition:background .15s,border-color .15s}
+.ex-copy:hover{background:var(--navy-2)}
+.ex-copy:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
+.ex-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.ex-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:16px 18px}
+.ex-card p{margin:8px 0 0;font-size:14px;line-height:1.55;color:var(--ink)}
+.ex-card__eyebrow{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ex-card__eyebrow .mono{color:var(--faint)}
+.ex-card.is-coral{border-left:4px solid var(--coral-deep);background:var(--coral-soft)}
+.ex-card.is-amber{border-left:4px solid var(--amber);background:var(--amber-soft)}
+.ex-steps{list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;position:relative}
+.ex-steps::before{content:'';position:absolute;left:22px;right:22px;top:22px;height:1px;background:var(--navy-line)}
+.ex-step{position:relative;display:flex;flex-direction:column;gap:12px}
+.ex-step__n{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--navy);border:1px solid var(--navy-line);font-family:var(--mono);font-size:12px;color:#fff;position:relative}
+.ex-step.is-active .ex-step__n{background:var(--coral);border-color:var(--coral);color:var(--navy)}
+.ex-step__t b{display:block;font-weight:500;font-size:15px;margin-bottom:6px}
+.ex-step__t p{margin:0;font-size:13px;line-height:1.55;color:rgba(255,255,255,.75)}
+.ex-gates{margin-top:20px}
+.ex-scroll{overflow-x:auto}
+.ex-scroll .tbl td{vertical-align:top}
+@media (max-width:1100px){.ex-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.ex-steps::before{display:none}}
+@media (max-width:760px){.ex-grid{grid-template-columns:minmax(0,1fr)}.ex-steps{grid-template-columns:minmax(0,1fr)}}
