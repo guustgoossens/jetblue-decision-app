@@ -1,0 +1,6 @@
+fastapi==0.121.0
+uvicorn==0.38.0
+pandas==2.3.3
+scikit-learn==1.7.2
+joblib==1.5.2
+databricks-sdk>=0.67.0

@@ -1,0 +1,29 @@
+.gn-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.gn-side{display:flex;flex-direction:column;gap:16px}
+.gn-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.gn-chips--small{margin:12px 0 0}
+.gn-chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 13px;font-size:13px;text-align:left;transition:border-color .15s,background .15s}
+.gn-chip:hover{border-color:var(--navy);background:var(--tint)}
+.gn-thread{display:flex;flex-direction:column;gap:18px;max-height:640px;overflow:auto;padding-right:2px}
+.gn-turn{display:flex;flex-direction:column;gap:10px}
+.gn-q{align-self:flex-end;max-width:85%;background:var(--navy);color:#fff;border-radius:14px 14px 4px 14px;padding:9px 14px;font-size:14px}
+.gn-a{white-space:pre-wrap;font-size:14px;line-height:1.55;max-width:70ch}
+.gn-sql{margin:0;background:var(--tint);border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;font-size:12px;line-height:1.5;overflow:auto;white-space:pre-wrap}
+.gn-scroll{overflow:auto;max-height:320px;border:1px solid var(--line);border-radius:var(--r-sm)}
+.gn-err{border-radius:var(--r);padding:12px 14px;background:var(--coral-soft);font-size:13px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.gn-err--soft{background:var(--amber-soft)}
+.gn-err p{margin:0;color:var(--ink)}
+.gn-think{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:13px}
+.gn-think i{width:7px;height:7px;border-radius:50%;background:var(--coral);animation:gn-pulse 1s ease-in-out infinite}
+.gn-think i:nth-child(2){animation-delay:.15s}.gn-think i:nth-child(3){animation-delay:.3s}
+.gn-think span{margin-left:6px}
+@keyframes gn-pulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+.gn-form{display:flex;gap:8px;margin-top:14px}
+.gn-input{flex:1;border:1px solid var(--line);border-radius:999px;padding:9px 16px;font:inherit;font-size:14px;background:#fff;transition:border-color .15s}
+.gn-input:focus-visible{outline:2px solid var(--coral-deep);outline-offset:2px;border-color:var(--navy)}
+.gn-form .btn:disabled{opacity:.5;cursor:default}
+.gn-tables{list-style:none;margin:0 0 10px;padding:0;font-size:12.5px;display:grid;gap:4px}
+.gn-tables li{padding:5px 9px;border:1px solid var(--line-soft);border-radius:6px;background:var(--tint)}
+.gn-p{font-size:13px;color:var(--muted);margin-bottom:10px}
+@media(max-width:900px){.gn-layout{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.gn-think i{animation:none}}
