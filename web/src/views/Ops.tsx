@@ -632,30 +632,81 @@ function Timeline({ rows, issues, span, now, winMs, onSeek }: {
 }
 
 
+const SKY_MODES = [
+  { key: 'clear', min: 0, label: 'Clear', note: 'normal ops' },
+  { key: 'breezy', min: 0.3, label: 'Breezy', note: 'watch turnarounds' },
+  { key: 'rough', min: 0.5, label: 'Rough weather', note: 'expect slower ramp work' },
+  { key: 'storm', min: 0.7, label: 'Storm', note: 'weather plan, de-icing or gate swap' },
+] as const
+
+function Cloud({ x, y, s, cls }: { x: number; y: number; s: number; cls: string }) {
+  return (
+    <g className={'sky-c ' + cls} transform={`translate(${x} ${y}) scale(${s})`}>
+      <ellipse cx="18" cy="14" rx="13" ry="8" />
+      <ellipse cx="32" cy="9" rx="14" ry="11" />
+      <ellipse cx="46" cy="14" rx="11" ry="7.5" />
+      <rect x="6" y="13" width="52" height="9" rx="4.5" />
+    </g>
+  )
+}
+
+/** Side-view airliner, nose to the right, ~70 x 32 units around the origin. */
+function Plane() {
+  return (
+    <g className="sky-craft">
+      <path className="sky-trail" d="M-90 1 H0" />
+      <path className="sky-wing-far" d="M30 -3 L23 -10 L28 -10 L38 -3Z" />
+      <path className="sky-tail" d="M3 -4 L-3 -19 L7 -19 L17 -4Z" />
+      <path className="sky-body" d="M5 -5 H55 Q67 -5 70 0 Q67 5 55 5 H5 Q0 5 0 0 Q0 -5 5 -5Z" />
+      <path className="sky-stab" d="M1 1 L-6 6 L5 6 L13 2Z" />
+      {Array.from({ length: 8 }, (_, i) => <circle key={i} className="sky-win" cx={20 + i * 4.4} cy="-1.2" r="0.95" />)}
+      <path className="sky-cockpit" d="M61 -2.6 H65 Q68 -1.4 67 -0.2 H61Z" />
+      <path className="sky-wing" d="M27 2 L16 14 L24 14 L42 3Z" />
+      <ellipse className="sky-engine" cx="29" cy="7.2" rx="5.2" ry="2.3" />
+    </g>
+  )
+}
+
 function Sky({ sev }: { sev: number }) {
-  const mode = sev >= 0.7 ? 'storm' : sev >= 0.4 ? 'cloudy' : 'clear'
-  const cloud = 'M0 14c0-6 5-10 11-9 3-6 13-6 16 1 6-1 11 3 10 8z'
+  const mode = [...SKY_MODES].reverse().find((m) => sev >= m.min) ?? SKY_MODES[0]
+  const k = mode.key
+  const wet = k === 'rough' || k === 'storm'
+  const drops = k === 'storm' ? 26 : 12
   return (
     <div className="sky-wrap">
-      <div className={'sky sky--' + mode} role="img" aria-label={`Weather severity ${num(sev, 2)}, ${mode}`}>
+      <div className={'sky sky--' + k} role="img" aria-label={`Weather severity ${num(sev, 2)}: ${mode.label}`}>
         <svg viewBox="0 0 400 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-          {mode === 'clear' && <circle className="sky-sun" cx="330" cy="30" r="14" />}
-          <g className="sky-c sky-c1"><path d={cloud} transform="translate(0 22) scale(1.6)" /></g>
-          <g className="sky-c sky-c2"><path d={cloud} transform="translate(0 70) scale(1.1)" /></g>
-          {mode !== 'clear' && <g className="sky-c sky-c3"><path d={cloud} transform="translate(0 40) scale(1.9)" /></g>}
-          {mode === 'storm' && (
-            <g className="sky-rain">
-              {Array.from({ length: 14 }, (_, i) => <line key={i} x1={20 + i * 28} y1={-20 - (i % 4) * 14} x2={14 + i * 28} y2={-4 - (i % 4) * 14} style={{ animationDelay: `${(i % 5) * 0.15}s` }} />)}
+          {k === 'clear' && <g className="sky-sun"><circle className="sky-sun__glow" cx="334" cy="30" r="26" /><circle cx="334" cy="30" r="12" /></g>}
+          {k === 'breezy' && <circle className="sky-sun sky-sun--hazy" cx="340" cy="26" r="11" />}
+          <Cloud x={0} y={10} s={k === 'clear' ? 0.9 : 1.3} cls="sky-c1" />
+          <Cloud x={0} y={72} s={k === 'clear' ? 0.7 : 1} cls="sky-c2" />
+          {k !== 'clear' && <Cloud x={0} y={36} s={1.6} cls="sky-c3" />}
+          {k === 'storm' && <Cloud x={0} y={-6} s={2.2} cls="sky-c4" />}
+          {(k === 'breezy' || k === 'rough') && (
+            <g className="sky-wind">
+              {[22, 48, 90, 104].map((y, i) => <path key={i} d={`M0 ${y} h${26 + (i % 2) * 18}`} style={{ animationDelay: `${i * 0.45}s` }} />)}
             </g>
           )}
-          <g className="sky-plane"><g className="sky-bob">
-            <path d="M0 0c6-4 22-5 34-1l8-1-5 3 5 2-9 0c-8 3-24 3-33 0z" />
-            <path d="M16-1L8-11h5l12 10zM16 3L8 12h5l12-8z" />
-          </g></g>
-          {mode === 'storm' && <rect className="sky-flash" width="400" height="120" />}
+          <g className="sky-plane"><g className="sky-bob"><Plane /></g></g>
+          {wet && (
+            <g className="sky-rain">
+              {Array.from({ length: drops }, (_, i) => (
+                <line key={i} x1={8 + i * (400 / drops)} y1={-16 - (i % 5) * 18} x2={2 + i * (400 / drops)} y2={-4 - (i % 5) * 18}
+                  style={{ animationDelay: `${((i * 37) % 10) * 0.06}s` }} />
+              ))}
+            </g>
+          )}
+          {k === 'storm' && (
+            <>
+              <path className="sky-bolt" d="M262 14 L250 46 L262 46 L246 84" />
+              <rect className="sky-flash" width="400" height="120" />
+            </>
+          )}
         </svg>
       </div>
-      <div className="sky-lab">Weather severity {num(sev, 2)} · {mode}</div>
+      <div className="sky-lab">
+        <b>{mode.label}</b> · weather severity {num(sev, 2)} · {mode.note}
+      </div>
     </div>
   )
 }
