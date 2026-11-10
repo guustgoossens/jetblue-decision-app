@@ -1,0 +1,35 @@
+# Every push to main rebuilds the web app and redeploys the Databricks App.
+# Needs: repo variable DATABRICKS_HOST and repo secret DATABRICKS_TOKEN (a personal access token).
+name: Deploy to Databricks App
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      APP: jetblue-decision-team12
+      DEST: /Workspace/Shared/jetblue-decision-team12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install
+        working-directory: web
+        run: bun install --frozen-lockfile
+      - name: Typecheck and build (writes app/static)
+        working-directory: web
+        run: bunx tsc --noEmit && bunx vite build
+      - uses: databricks/setup-cli@main
+      - name: Upload source
+        run: databricks sync app "$DEST" --full --exclude '__pycache__' --exclude '.venv*'
+      - name: Deploy
+        run: databricks apps deploy "$APP" --source-code-path "$DEST"

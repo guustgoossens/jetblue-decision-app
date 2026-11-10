@@ -72,13 +72,35 @@ def _genie_client(token):
     return WorkspaceClient()
 
 
+# We cannot edit the shared Genie space's instructions (owner-only), so the app scopes each
+# question itself: the first message of a conversation, and any business-style follow-up,
+# carries a short context so Genie answers from the pilot tables instead of refusing.
+SCOPE = (
+    "Context: the tables in xhec26.jetblue_d2_team_12 describe a flight-disruption pilot on synthetic data. "
+    "blind_scored = upcoming flight-hours with risk = predicted probability of disruption in the next hour; "
+    "validation_scored = past flight-hours with known label; clean_features, quarantine and quality_findings "
+    "describe the data repair; model_comparison lists the models. When asked about value, cost, revenue or "
+    "shareholder value, do not refuse: translate it into these figures, using the stated assumptions "
+    "expected disruption cost = risk * 5000 USD per flight-hour and value of acting = risk * 0.3 * 5000 - 500 USD, "
+    "and say they are assumptions. Answer with a query on these tables and a short plain-language summary. "
+    "Question: "
+)
+BUSINESS_WORDS = ("value", "shareholder", "revenue", "cost", "money", "worth", "profit", "roi", "save",
+                  "invest", "should we", "recommend", "strategy", "budget", "dollar", "$")
+
+
+def _scoped(question: str, first: bool) -> str:
+    q = question.lower()
+    return SCOPE + question if first or any(w in q for w in BUSINESS_WORDS) else question
+
+
 def _genie_ask(question: str, conversation_id, token):
     w = _genie_client(token)
     space = os.environ.get("GENIE_SPACE_ID") or GENIE_SPACE_ID_DEFAULT
     if conversation_id:
-        msg = w.genie.create_message_and_wait(space, conversation_id, question)
+        msg = w.genie.create_message_and_wait(space, conversation_id, _scoped(question, False))
     else:
-        msg = w.genie.start_conversation_and_wait(space, question)
+        msg = w.genie.start_conversation_and_wait(space, _scoped(question, True))
     conv_id = getattr(msg, "conversation_id", None) or conversation_id
     out = {"conversationId": conv_id, "messageId": msg.id or getattr(msg, "message_id", None),
            "text": "", "sql": None, "columns": [], "rows": []}

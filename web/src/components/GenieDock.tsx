@@ -1,28 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { data } from '../lib/data'
 import { useApp, LOGGED_CUTOFF, REGIONS, type Tenant } from '../lib/store'
+import GenieChat, { GenieText, GENIE_URL } from './GenieChat'
 import '../styles/genie.css'
 
-const EXAMPLES: Record<Tenant, string[]> = {
-  ops: [
-    'Which region has the highest average blind risk?',
-    'Show the 10 highest-risk upcoming flight-hours with their features',
-    'How many blind flight-hours were rejected and why?',
-  ],
-  cio: [
-    'What is the disruption rate in validation by region?',
-    'Show the 10 highest-risk upcoming flight-hours with their features',
-    'How does the champion model compare to the baseline?',
-  ],
-  data: [
-    'How many records were quarantined, by reason?',
-    'What is the disruption rate in validation by region?',
-    'Which quality findings affected the most records?',
-  ],
-}
-export const GENIE_URL = `https://emerging-emea-hackathons.cloud.databricks.com/genie/rooms/${data.meta.genieSpaceId}`
-const permissionHint = (e: string) => /scope|permission|forbidden|unauthori|403|401|access/i.test(e)
+export { GENIE_URL }
+
 
 
 interface Chip { label: string; ask?: string; go?: string }
@@ -88,105 +72,18 @@ function parseIntent(q: string): string | null {
   return `Applied: ${parts.join(', ')}.`
 }
 
-function BarChart({ columns, rows }: { columns: string[]; rows: unknown[][] }) {
-  if (columns.length !== 2 || rows.length < 1 || rows.length > 20) return null
-  const data2 = rows.map((r) => ({ k: String(r[0] ?? ''), v: Number(r[1]) }))
-  if (data2.some((d) => !Number.isFinite(d.v) || r0num(rows))) return null
-  const max = Math.max(...data2.map((d) => d.v), 1e-9)
-  const H = 22, W = 560, L = 150
-  return (
-    <svg className="gn-bars" viewBox={`0 0 ${W} ${data2.length * H + 4}`} role="img" aria-label={`${columns[1]} by ${columns[0]}`}>
-      {data2.map((d, i) => (
-        <g key={i} transform={`translate(0 ${i * H + 2})`}>
-          <text x={L - 8} y={14} textAnchor="end" fontSize="11" fill="currentColor">{d.k.length > 22 ? d.k.slice(0, 21) + '…' : d.k}</text>
-          <rect x={L} y={3} width={Math.max(1, (d.v / max) * (W - L - 70))} height={14} rx={3} fill="#17343d" />
-          <text x={L + Math.max(1, (d.v / max) * (W - L - 70)) + 6} y={14} fontSize="11" className="mono" fill="currentColor">{Number.isInteger(d.v) ? d.v.toLocaleString('en-US') : d.v.toFixed(3)}</text>
-        </g>
-      ))}
-    </svg>
-  )
-}
-const r0num = (rows: unknown[][]) => rows.every((r) => r[0] != null && r[0] !== '' && Number.isFinite(Number(r[0])))
-
-export function GenieChat({ tenant, compact, hideForm }: { tenant: Tenant; compact?: boolean; hideForm?: boolean }) {
-  const turns = useApp((s) => s.genieTurns)
-  const conv = useApp((s) => s.genieConv)
-  const busy = useApp((s) => s.genieBusy)
-  const ask = useApp((s) => s.genieAsk)
-  const reset = useApp((s) => s.genieReset)
-  const [input, setInput] = useState('')
-  const endRef = useRef<HTMLDivElement>(null)
-  const examples = EXAMPLES[tenant]
+function DockChat({ tenant, local, onSend }: { tenant: Tenant; local: { q: string; a: string }[]; onSend: (q: string) => void }) {
   const navigate = useNavigate()
-  const [local, setLocal] = useState<{ q: string; a: string }[]>([])
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [turns, busy, local])
   const brief = useMemo(() => briefing(tenant), [tenant])
-  const send = (q: string) => {
-    setInput('')
-    const applied = parseIntent(q)
-    if (applied) { navigate('/ops'); setLocal((l) => [...l, { q, a: applied }]); return }
-    void ask(q)
-  }
-  const run = (c: Chip) => { if (c.ask) send(c.ask); else if (c.go) { navigate(c.go) } }
-
-  return (
-    <div className={`gc ${compact ? 'gc--compact' : ''}`}>
-      <div className="gc__thread" aria-live="polite">
-        <div className="gn-brief">
-          {brief.lines.map((l, i) => <p key={i} className="gn-a">{l}</p>)}
-          {brief.tag && <span className="gn-tag">{brief.tag}</span>}
-          <div className="gn-chips gn-chips--small">{brief.chips.map((c) => <button key={c.label} className="gn-chip gn-chip--act" onClick={() => run(c)}>{c.label}</button>)}</div>
-        </div>
-        {turns.length === 0 && local.length === 0 && (
-          <div className="gc__empty">
-            <p className="gn-p">Ask about the repaired data in plain language. Genie reads the pilot tables only; blind outcomes are unknown.</p>
-            <div className="gn-chips">{examples.map((e) => <button key={e} className="gn-chip" onClick={() => send(e)}>{e}</button>)}</div>
-          </div>
-        )}
-        {local.map((t, i) => <div key={'l' + i} className="gn-turn"><div className="gn-q">{t.q}</div><div className="gn-a">{t.a}</div></div>)}
-        {turns.map((t, i) => {
-          const err = t.failed ?? t.a?.error
-          const noAnswer = !!err && !t.a?.text && !t.a?.sql
-          return (
-            <div key={i} className="gn-turn">
-              <div className="gn-q">{t.q}</div>
-              {!t.a && !t.failed && <div className="gn-think"><i /><i /><i /><span>Genie is working</span></div>}
-              {t.a?.text && <div className="gn-a">{t.a.text}</div>}
-              {t.a?.sql && <pre className="gn-sql mono">{t.a.sql}</pre>}
-              {tenant === 'data' && t.a && <BarChart columns={t.a.columns} rows={t.a.rows} />}
-              {t.a && t.a.columns.length > 0 && (
-                <div className="gn-scroll">
-                  <table className="tbl">
-                    <thead><tr>{t.a.columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
-                    <tbody>{t.a.rows.map((r, ri) => (
-                      <tr key={ri}>{r.map((v, ci) => <td key={ci} className="mono">{v == null ? '' : String(v)}</td>)}</tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              )}
-              {err && (
-                <div className={`gn-err ${noAnswer ? '' : 'gn-err--soft'}`}>
-                  <b>{noAnswer ? 'Genie could not answer.' : 'Partial answer.'}</b> {err}
-                  {permissionHint(err) && <p>The viewer must accept the app's Genie permission (user authorization scope) when opening the app. Until then, ask in Databricks directly.</p>}
-                  <a className="btn" href={GENIE_URL} target="_blank" rel="noreferrer">Open in Databricks Genie</a>
-                </div>
-              )}
-            </div>
-          )
-        })}
-        <div ref={endRef} />
-      </div>
-      {turns.length > 0 && !busy && (
-        <div className="gn-chips gn-chips--small">{examples.map((e) => <button key={e} className="gn-chip" onClick={() => send(e)}>{e}</button>)}</div>
-      )}
-      {!hideForm && <form className="gn-form" onSubmit={(e) => { e.preventDefault(); send(input) }}>
-        <input className="gn-input" value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder={conv ? 'Ask a follow-up' : 'Ask about the repaired data'} aria-label="Question for Genie" disabled={busy} />
-        <button className="btn btn--primary" type="submit" disabled={busy || !input.trim()}>Ask</button>
-      </form>}
-      {turns.length > 0 && <button type="button" className="gc__reset" onClick={reset}>New conversation</button>}
+  const run = (c: Chip) => { if (c.ask) onSend(c.ask); else if (c.go) navigate(c.go) }
+  const header = (
+    <div className="gn-brief">
+      {brief.lines.map((l, i) => <GenieText key={i}>{l}</GenieText>)}
+      {brief.tag && <span className="gn-tag">{brief.tag}</span>}
+      <div className="gn-chips gn-chips--small">{brief.chips.map((c) => <button key={c.label} className="gn-chip gn-chip--act" onClick={() => run(c)}>{c.label}</button>)}</div>
     </div>
   )
+  return <GenieChat tenant={tenant} variant="dock" header={header} local={local} onSend={onSend} hideForm />
 }
 
 export default function GenieDock({ tenant }: { tenant: Tenant }) {
@@ -198,7 +95,7 @@ export default function GenieDock({ tenant }: { tenant: Tenant }) {
   const navigate = useNavigate()
   const [dismissed, setDismissed] = useState(false)
   const [input, setInput] = useState('')
-  const [reply, setReply] = useState<string | null>(null)
+  const [local, setLocal] = useState<{ q: string; a: string }[]>([])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') { e.preventDefault(); setDismissed(false); setOpen(!useApp.getState().genieOpen) }
@@ -207,18 +104,23 @@ export default function GenieDock({ tenant }: { tenant: Tenant }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [setOpen])
-  if (pathname === '/genie') return null
+  if (tenant !== 'ops' || pathname === '/ask' || pathname === '/genie') return null
   if (dismissed) return (
     <div className="gisle-wrap"><button type="button" className="gisle__tab" onClick={() => setDismissed(false)}>Genie</button></div>
   )
+  const send = (q: string) => {
+    const applied = parseIntent(q)
+    if (applied) { navigate('/ops'); setLocal((l) => [...l, { q, a: applied }]); return }
+    void ask(q)
+  }
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const q = input.trim()
     if (!q || busy) return
     setInput('')
     const applied = parseIntent(q)
-    if (applied) { navigate('/ops'); setReply(applied); setOpen(true); return }
-    setReply(null); setOpen(true); void ask(q)
+    if (applied) { navigate('/ops'); setLocal((l) => [...l, { q, a: applied }]); setOpen(true); return }
+    setOpen(true); void ask(q)
   }
   const placeholder = tenant === 'ops' ? 'Ask Genie about the next 30 minutes' : tenant === 'cio' ? 'Ask Genie about the expected disruption cost' : 'Ask Genie about the repaired data'
   return (
@@ -226,8 +128,7 @@ export default function GenieDock({ tenant }: { tenant: Tenant }) {
       <section className={`gisle ${open ? 'is-open' : ''}`} aria-label="Ask Genie">
         {open && (
           <div className="gisle__body">
-            <GenieChat tenant={tenant} compact hideForm />
-            {reply && <div className="gn-a gisle__reply">{reply}</div>}
+            <DockChat tenant={tenant} local={local} onSend={send} />
           </div>
         )}
         <form className="gisle__bar" onSubmit={submit}>

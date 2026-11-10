@@ -4,7 +4,7 @@ set -euo pipefail
 PROFILE="${PROFILE:-DEFAULT}"
 APP="jetblue-decision-team12"
 ME="$(databricks current-user me -p "$PROFILE" | python3 -c 'import sys,json;print(json.load(sys.stdin)["userName"])')"
-DEST="/Workspace/Users/$ME/$APP"
+DEST="/Workspace/Shared/$APP"
 cd "$(dirname "$0")/app"
 [ -f static/index.html ] || { echo "static/index.html missing"; exit 1; }
 databricks apps get "$APP" -p "$PROFILE" >/dev/null 2>&1 || databricks apps create "$APP" -p "$PROFILE"   # waits until compute ACTIVE
