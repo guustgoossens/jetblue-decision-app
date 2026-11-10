@@ -1,6 +1,6 @@
 # Disruption Desk
 
-X-HEC Data & AI Lab, Day 2, team 12 ("Databricked"). A decision app for a fictionalized JetBlue flight-disruption case, built on synthetic data and hosted as a Databricks App (FastAPI serving a Vite + React build).
+X-HEC Data & AI Lab, Day 2, team 12 ("Databricked"). In a few hours, we built a decision app for a fictionalized JetBlue flight-disruption case, built on synthetic data and hosted as a Databricks App (FastAPI serving a Vite + React build).
 
 > Classroom project. Synthetic data on a fictionalized case. Not affiliated with or endorsed by JetBlue.
 
