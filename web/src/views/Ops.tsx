@@ -70,6 +70,8 @@ const Ic = ({ children }: { children: ReactNode }) => (
 const IcSearch = () => <Ic><circle cx="9" cy="9" r="5.5" /><path d="M13.2 13.2L17 17" /></Ic>
 const IcFilter = () => <Ic><path d="M3 5h14M6 10h8M8.5 15h3" /></Ic>
 const IcDown = () => <Ic><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5M4 16h12" /></Ic>
+const IcChevUp = () => <Ic><path d="M5.5 12.5L10 8l4.5 4.5" /></Ic>
+const IcChevDown = () => <Ic><path d="M5.5 7.5L10 12l4.5-4.5" /></Ic>
 const IcFlag = () => <Ic><path d="M5 17V3.5M5 4h9l-2 3 2 3H5" /></Ic>
 const IcEye = () => <Ic><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z" /><circle cx="10" cy="10" r="2.2" /></Ic>
 const IcCloud = () => <Ic><path d="M6 14.5h8a3 3 0 0 0 .4-6A4.5 4.5 0 0 0 5.8 7.6 3.4 3.4 0 0 0 6 14.5z" /></Ic>
@@ -183,14 +185,25 @@ export default function Ops() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, issues, region, needle, cutoff, capacity, now, winMin, f, maxBuf, sorting])
 
+  const selected = rows.find((r) => r.id === selectedId) ?? rows[0]
+  // Step through the drawer in the table's visible order.
+  const listed = useMemo(() => [...view.actions, ...view.over, ...view.below], [view])
+  const at = selected ? listed.findIndex((r) => r.id === selected.id) : -1
+  const prevId = at > 0 ? listed[at - 1].id : null
+  const nextId = at >= 0 ? listed[at + 1]?.id ?? null : listed[0]?.id ?? null
+
   useEffect(() => {
     if (!open) return
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setOpen(false); return }
+      const t = e.target
+      if (t instanceof Element && t.closest('input, select, textarea, [contenteditable="true"]')) return // sliders own the arrow keys
+      const id = e.key === 'ArrowUp' ? prevId : e.key === 'ArrowDown' ? nextId : null
+      if (id) { e.preventDefault(); setSelectedId(id) }
+    }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
-  }, [open])
-
-  const selected = rows.find((r) => r.id === selectedId) ?? rows[0]
+  }, [open, prevId, nextId, setSelectedId])
   const ackN = view.actions.filter((r) => acked.has(r.id)).length
 
   const exportCsv = () => {
@@ -390,7 +403,12 @@ export default function Ops() {
           <aside className="ops-drawer" aria-label="Flight-hour detail">
             <div className="ops-drawer__bar">
               <span className="ops-tag">Prediction</span>
-              <button className="btn" onClick={() => setOpen(false)}>Close</button>
+              <div className="ops-drawer__nav">
+                {at >= 0 && <span className="ops-drawer__pos mono">{at + 1} / {listed.length}</span>}
+                <button className="ops-icb" onClick={() => prevId && setSelectedId(prevId)} disabled={!prevId} aria-label="Previous flight-hour" title="Previous (↑)"><IcChevUp /></button>
+                <button className="ops-icb" onClick={() => nextId && setSelectedId(nextId)} disabled={!nextId} aria-label="Next flight-hour" title="Next (↓)"><IcChevDown /></button>
+                <button className="btn" onClick={() => setOpen(false)}>Close</button>
+              </div>
             </div>
             <Detail key={selected.id} row={selected} cutoff={cutoff} />
           </aside>
