@@ -31,6 +31,7 @@ interface State {
   genieBusy: boolean
   genieAsk: (question: string) => Promise<void>
   genieReset: () => void
+  genieGen: number
   tenant: Tenant | null
   setTenant: (t: Tenant | null) => void
   cutoff: number
@@ -58,26 +59,34 @@ export const useApp = create<State>()((set, get) => ({
   genieTurns: [],
   genieConv: undefined,
   genieBusy: false,
-  genieReset: () => set({ genieTurns: [], genieConv: undefined }),
+  genieGen: 0,
+  genieReset: () => set((s) => ({ genieTurns: [], genieConv: undefined, genieBusy: false, genieGen: s.genieGen + 1 })),
   genieAsk: async (question) => {
     const q = question.trim()
     if (!q || get().genieBusy) return
+    const gen = get().genieGen
+    const live = () => get().genieGen === gen // a profile switch or reset drops late answers
     set((s) => ({ genieBusy: true, genieTurns: [...s.genieTurns, { q }] }))
-    const patch = (p: Partial<GenieTurn>) => set((s) => ({ genieTurns: s.genieTurns.map((x, i) => (i === s.genieTurns.length - 1 ? { ...x, ...p } : x)) }))
+    const patch = (p: Partial<GenieTurn>) => { if (live()) set((s) => ({ genieTurns: s.genieTurns.map((x, i) => (i === s.genieTurns.length - 1 ? { ...x, ...p } : x)) })) }
     try {
-      const r = await fetch('/api/genie', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: q, conversationId: get().genieConv }) })
+      const r = await fetch('/api/genie', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: q, conversationId: get().genieConv, tenant: get().tenant }) })
       const j = (await r.json()) as GenieReply
+      if (!live()) return
       if (j.conversationId) set({ genieConv: j.conversationId })
       patch({ a: { ...j, columns: j.columns ?? [], rows: j.rows ?? [], text: j.text ?? '' } })
     } catch (e) {
       patch({ failed: e instanceof Error ? e.message : 'Request failed' })
     } finally {
-      set({ genieBusy: false })
+      if (live()) set({ genieBusy: false })
     }
   },
   tenant: readTenant(),
   setTenant: (tenant) => {
     try { if (tenant) sessionStorage.setItem(TENANT_KEY, tenant); else sessionStorage.removeItem(TENANT_KEY) } catch { /* ignore */ }
+    // Tenant isolation: a profile switch starts from a blank Genie conversation and default filters.
+    if (tenant !== get().tenant) {
+      set((s) => ({ genieTurns: [], genieConv: undefined, genieBusy: false, genieOpen: false, genieGen: s.genieGen + 1, opsFilters: { ...OPS_FILTER_DEFAULTS } }))
+    }
     set({ tenant })
   },
   cutoff: 0.5,

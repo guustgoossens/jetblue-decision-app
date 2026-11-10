@@ -691,7 +691,7 @@ function Sky({ sev }: { sev: number }) {
           {wet && (
             <g className="sky-rain">
               {Array.from({ length: drops }, (_, i) => (
-                <line key={i} x1={8 + i * (400 / drops)} y1={-16 - (i % 5) * 18} x2={2 + i * (400 / drops)} y2={-4 - (i % 5) * 18}
+                <line key={i} x1={8 + i * (460 / drops)} y1={-16 - (i % 5) * 18} x2={-2 + i * (460 / drops)} y2={-4 - (i % 5) * 18}
                   style={{ animationDelay: `${((i * 37) % 10) * 0.06}s` }} />
               ))}
             </g>

@@ -72,46 +72,59 @@ def _genie_client(token):
     return WorkspaceClient()
 
 
-# We cannot edit the shared Genie space's instructions (owner-only), so the app scopes each
-# question itself: the first message of a conversation, and any business-style follow-up,
-# carries a short context so Genie answers from the pilot tables instead of refusing.
-SCOPE = (
-    "Context: the tables in xhec26.jetblue_d2_team_12 describe a flight-disruption pilot on synthetic data. "
-    "blind_scored = upcoming flight-hours with risk = predicted probability of disruption in the next hour; "
-    "validation_scored = past flight-hours with known label; clean_features, quarantine and quality_findings "
-    "describe the data repair; model_comparison lists the models. When asked about value, cost, revenue or "
-    "shareholder value, do not refuse: translate it into these figures, using the stated assumptions "
-    "expected disruption cost = risk * 5000 USD per flight-hour and value of acting = risk * 0.3 * 5000 - 500 USD, "
-    "and say they are assumptions. Answer with a query on these tables and a short plain-language summary. "
-    "Question: "
+# We cannot edit the shared Genie space's instructions (owner-only), so the app grounds every
+# question itself: a glossary of the pilot tables, the app's own "now", and the tenant's role.
+GLOSSARY = (
+    "Data: schema xhec26.jetblue_d2_team_12, synthetic flight-disruption pilot. "
+    "blind_scored(record_id, segment = region north/south/east/west, observed_at, queue_depth, weather_severity 0-1, "
+    "turnaround_buffer_minutes, risk = predicted probability of disruption in the next hour) holds the 342 upcoming flight-hours. "
+    "validation_scored has the same columns plus label (1 = disrupted). quarantine(record_id, split, reason) holds the 293 "
+    "rejected records; quality_findings(issue, test, resolution) the 9 data checks; clean_features(record_id, x1 queue, "
+    "x2 weather, x3 buffer, split) the 1,707 usable records; model_comparison the MLflow runs (champion LogisticRegression). "
+    "The app's current time is 2026-09-03 08:49 UTC, so 'now' or 'next 30 minutes' means observed_at between 08:49 and 09:19 UTC "
+    "on 2026-09-03; the ops desk flags risk >= 0.5. Money is a scenario: expected disruption cost = risk * 5000 USD, "
+    "value of acting = risk * 0.3 * 5000 - 500 USD; say these are assumptions. "
 )
-BUSINESS_WORDS = ("value", "shareholder", "revenue", "cost", "money", "worth", "profit", "roi", "save",
-                  "invest", "should we", "recommend", "strategy", "budget", "dollar", "$")
+ROLE = {
+    "ops": "The user is the duty manager: answer about specific upcoming flight-hours, regions and what to act on first. ",
+    "cio": "The user is the CIO: answer in money, totals and trade-offs, and keep it to a few sentences. ",
+    "data": "The user is the VP of Data: answer about data quality, quarantine reasons, repairs and model evidence. ",
+}
+STYLE = ("Always answer with a SQL query on these tables, then two or three plain sentences with the key numbers. "
+         "Never refuse a business question: translate it into these tables. Question: ")
+REFUSAL = ("can't", "cannot", "not able", "unable", "no data", "don't have", "do not have", "not available", "outside")
 
 
-def _scoped(question: str, first: bool) -> str:
-    q = question.lower()
-    return SCOPE + question if first or any(w in q for w in BUSINESS_WORDS) else question
+def _scoped(question: str, first: bool, tenant) -> str:
+    role = ROLE.get(tenant or "", "")
+    return (GLOSSARY + role + STYLE if first else role + STYLE) + question
 
 
-def _genie_ask(question: str, conversation_id, token):
+def _send(w, space, conversation_id, text):
+    if conversation_id:
+        return w.genie.create_message_and_wait(space, conversation_id, text)
+    return w.genie.start_conversation_and_wait(space, text)
+
+
+def _genie_ask(question: str, conversation_id, token, tenant=None):
     w = _genie_client(token)
     space = os.environ.get("GENIE_SPACE_ID") or GENIE_SPACE_ID_DEFAULT
-    if conversation_id:
-        msg = w.genie.create_message_and_wait(space, conversation_id, _scoped(question, False))
-    else:
-        msg = w.genie.start_conversation_and_wait(space, _scoped(question, True))
+    msg = _send(w, space, conversation_id, _scoped(question, not conversation_id, tenant))
     conv_id = getattr(msg, "conversation_id", None) or conversation_id
+    # One nudge when Genie answers without querying the data (usually a refusal).
+    if not any(a.query is not None for a in (msg.attachments or [])):
+        said = " ".join((a.text.content or "") for a in (msg.attachments or []) if a.text is not None).lower()
+        if not said or any(r in said for r in REFUSAL):
+            msg = _send(w, space, conv_id, GLOSSARY + STYLE + question)
     out = {"conversationId": conv_id, "messageId": msg.id or getattr(msg, "message_id", None),
            "text": "", "sql": None, "columns": [], "rows": []}
-    texts = []
+    texts, desc = [], None
     for att in (msg.attachments or []):
         if att.text is not None and getattr(att.text, "content", None):
             texts.append(att.text.content)
         if att.query is not None:
             q = att.query
-            if getattr(q, "description", None):
-                texts.append(q.description)
+            desc = getattr(q, "description", None)
             out["sql"] = getattr(q, "query", None)
             try:
                 res = w.genie.get_message_attachment_query_result(
@@ -126,8 +139,17 @@ def _genie_ask(question: str, conversation_id, token):
                     out["rows"] = [list(r) for r in rows[:GENIE_MAX_ROWS]]
             except Exception as e:  # keep the text answer even if the table fails
                 out["error"] = f"Result table unavailable: {e}"
-    out["text"] = "\n\n".join(t for t in texts if t)
+    # Genie's query description restates the question ("You want to see ..."): only use it if nothing else was said.
+    if not texts and desc:
+        texts.append(desc)
+    out["text"] = "\n\n".join(_tidy(t) for t in texts if t)
     return out
+
+
+def _tidy(t: str) -> str:
+    import re
+    t = re.sub(r"^(You want to|You asked|You are asking|You'd like to)[^.]*\.\s*", "", t.strip())
+    return t[:1].upper() + t[1:] if t else t
 
 
 @app.post("/api/genie")
@@ -136,13 +158,14 @@ async def genie(request: Request):
         body = await request.json()
         question = str(body.get("question", "")).strip()
         conv = body.get("conversationId") or None
+        tenant = body.get("tenant") if body.get("tenant") in ("ops", "cio", "data") else None
     except Exception:
         return JSONResponse({"error": "body must be JSON like {\"question\":\"...\"}"}, status_code=200)
     if not question:
         return JSONResponse({"error": "question is required"}, status_code=200)
     token = request.headers.get("x-forwarded-access-token")
     try:
-        return await run_in_threadpool(_genie_ask, question, conv, token)
+        return await run_in_threadpool(_genie_ask, question, conv, token, tenant)
     except Exception as e:
         return JSONResponse({"conversationId": conv, "messageId": None, "text": "", "sql": None,
                              "columns": [], "rows": [], "error": f"{type(e).__name__}: {e}"})

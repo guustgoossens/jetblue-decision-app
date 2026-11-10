@@ -224,14 +224,7 @@
 .sky--storm .sky-body { stroke: #9fb6e0; }
 .sky--storm .sky-win { fill: #ffe58a; }
 
-.sky-plane { transform: translate(-100px, 60px); animation: sky-fly 11s linear infinite; }
-.sky--breezy .sky-plane { animation-duration: 9s; }
-.sky--rough .sky-plane { animation-duration: 8s; }
-.sky--storm .sky-plane { animation-duration: 7s; }
-.sky-bob { transform-box: fill-box; transform-origin: center; }
-.sky--breezy .sky-bob { animation: sky-bob 2.6s ease-in-out infinite; }
-.sky--rough .sky-bob { animation: sky-tilt 1.4s ease-in-out infinite; }
-.sky--storm .sky-bob { animation: sky-wob .7s ease-in-out infinite; }
+.sky-plane { transform: translate(165px, 60px); } /* the aircraft holds still; the world moves past it */
 
 .sky-wind path { stroke: #fff; stroke-width: 1.2; stroke-linecap: round; opacity: 0; animation: sky-wind 1.8s linear infinite; }
 .sky--rough .sky-wind path { stroke: #e7edf5; }
@@ -243,19 +236,18 @@
 .sky-flash { fill: #dfe9ff; opacity: 0; animation: sky-flash 6s steps(1) infinite; }
 
 @keyframes sky-fly { from { transform: translate(-100px, 60px); } to { transform: translate(470px, 60px); } }
-@keyframes sky-drift { from { transform: translateX(-140px); } to { transform: translateX(440px); } }
+@keyframes sky-drift { from { transform: translateX(440px); } to { transform: translateX(-140px); } }
 @keyframes sky-glow { 50% { opacity: .85; } }
 @keyframes sky-bob { 50% { transform: translateY(-3px); } }
 @keyframes sky-tilt { 0%, 100% { transform: translateY(-3px) rotate(-3deg); } 50% { transform: translateY(3px) rotate(3deg); } }
 @keyframes sky-wob { 0%, 100% { transform: translateY(-4px) rotate(-6deg); } 50% { transform: translateY(4px) rotate(5deg); } }
 @keyframes sky-wind { 0% { transform: translateX(420px); opacity: 0; } 15% { opacity: .8; } 85% { opacity: .8; } 100% { transform: translateX(-60px); opacity: 0; } }
-@keyframes sky-rain { to { transform: translate(-12px, 150px); } }
+@keyframes sky-rain { to { transform: translate(-46px, 150px); } }
 @keyframes sky-bolt { 0%, 100% { opacity: 0; } 80% { opacity: 1; } 81% { opacity: 0; } 83% { opacity: .8; } 84% { opacity: 0; } }
 @keyframes sky-flash { 0%, 100% { opacity: 0; } 80% { opacity: .45; } 81% { opacity: 0; } 83% { opacity: .3; } 84% { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .sky-plane, .sky-bob, .sky-c, .sky-rain line, .sky-flash, .sky-bolt, .sky-wind path, .sky-sun__glow { animation: none !important; }
-  .sky-plane { transform: translate(170px, 60px); }
   .sky-flash, .sky-wind { display: none; }
   .sky-bolt { opacity: 1; }
 }
