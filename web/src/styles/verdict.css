@@ -210,3 +210,7 @@
 .verdict-chip--lg { padding: 8px 26px; font-size: 14px; }
 .verdict-dec__alt { margin-left: 8px; font-size: 13px; color: var(--muted); }
 @media (max-width: 900px) { .verdict-strip, .verdict-cols, .verdict-scn { grid-template-columns: 1fr 1fr; } .verdict-cols { grid-template-columns: 1fr; } }
+
+.verdict-cols--one { grid-template-columns: 1fr; }
+.verdict-tbl td, .verdict-tbl th { white-space: nowrap; }
+.verdict-note { margin: 12px 0 0; }

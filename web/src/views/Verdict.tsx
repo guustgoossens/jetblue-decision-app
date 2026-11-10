@@ -6,6 +6,8 @@ import { bestBalanced, confusion } from '../lib/metrics';
 import { LOGGED_CUTOFF, useApp } from '../lib/store';
 import { num, pct, pct1, usd } from '../lib/format';
 import { gates } from '../lib/narrative';
+import { predict } from '../lib/scoring';
+import { breakEven } from '../lib/store';
 import '../styles/verdict.css';
 
 type Tone = 'neutral' | 'coral' | 'green' | 'navy' | 'amber';
@@ -15,20 +17,29 @@ export default function Verdict() {
   const cutoff = useApp((s) => s.cutoff);
   const setCutoff = useApp((s) => s.setCutoff);
   const a = useApp((s) => s.assumptions);
+  const capacity = useApp((s) => s.capacity);
   const [choice, setChoice] = useState<Choice>(null);
 
   const best = useMemo(() => bestBalanced(data.validation, 'lr'), []);
   const c = useMemo(() => confusion(data.validation, 'lr', cutoff), [cutoff]);
 
-  const quarters = useMemo(() => {
-    const sorted = [...data.validation].sort((p, q) => q.lr - p.lr);
-    const n = sorted.length;
-    return [0, 1, 2, 3].map((i) => {
-      const part = sorted.slice(Math.floor((i * n) / 4), Math.floor(((i + 1) * n) / 4));
-      const hits = part.filter((r) => r.y === 1).length;
-      return { label: ['Top quarter', 'Second', 'Third', 'Bottom quarter'][i], n: part.length, rate: part.length ? hits / part.length : 0 };
-    });
-  }, []);
+  const money = useMemo(() => {
+    const ts = (x: string) => new Date(x).getTime();
+    const rows = data.queue.map((r) => {
+      const risk = predict({ x1: r.x1, x2: r.x2, x3: r.x3 });
+      return { id: r.id, region: r.segment, t: ts(r.observedAt), risk, cost: risk * a.disruptionCost, value: risk * a.preventRate * a.disruptionCost - a.interventionCost };
+    }).sort((p, q) => q.value - p.value);
+    const tEnd = Math.max(...rows.map((r) => r.t));
+    const shift = rows.filter((r) => r.t > tEnd - 12 * 3600 * 1000);
+    const sum = (xs: typeof rows, f: (r: (typeof rows)[number]) => number) => xs.reduce((t, r) => t + f(r), 0);
+    return {
+      top: rows.slice(0, 15),
+      shiftCost: sum(shift, (r) => r.cost), shiftN: shift.length,
+      totalCost: sum(rows, (r) => r.cost), totalN: rows.length,
+      captured: sum(rows.slice(0, capacity).filter((r) => r.value > 0), (r) => r.value),
+    };
+  }, [a, capacity]);
+  const be = breakEven(a);
 
   const biz = data.business;
   const target = biz.delaysPerWeek * (1 - biz.targetReduction);
@@ -63,28 +74,47 @@ export default function Verdict() {
 
       <div className="verdict-strip">
         <div className="verdict-kpi">
-          <span className="eyebrow">Delays / week</span>
-          <b className="mono">{biz.delaysPerWeek} → {num(target, 0)}</b>
-          <small>target <Pill>From discovery</Pill></small>
+          <span className="eyebrow">Expected disruption cost, next shift</span>
+          <b className="mono">{usd(money.shiftCost)}</b>
+          <small>{money.shiftN} flight-hours, last 12 h <Pill tone="amber">Assumption</Pill></small>
         </div>
         <div className="verdict-kpi">
-          <span className="eyebrow">Model balanced accuracy</span>
-          <b className="mono">{num(champion.balancedAccuracy, 3)}</b>
-          <small>vs {num(dummy.balancedAccuracy, 3)} baseline <Pill tone="green">Validation</Pill></small>
+          <span className="eyebrow">Expected cost, blind set</span>
+          <b className="mono">{usd(money.totalCost)}</b>
+          <small>{money.totalN} flight-hours <Pill tone="amber">Assumption</Pill></small>
         </div>
         <div className="verdict-kpi">
-          <span className="eyebrow">Feed usable</span>
-          <b className="mono">{eligible.toLocaleString('en-US')} / {expected.toLocaleString('en-US')}</b>
-          <small>{pct(eligible / expected)} after repair</small>
+          <span className="eyebrow">Value if acting on top {capacity}</span>
+          <b className="mono">{usd(money.captured)}</b>
+          <small>net of intervention cost <Pill tone="amber">Scenario</Pill></small>
         </div>
         <div className="verdict-kpi">
-          <span className="eyebrow">Data latency</span>
-          <b className="mono">{biz.latencyNowMin}+ → &lt;{biz.latencyNeededMin} min</b>
-          <small>target <Pill>From discovery</Pill></small>
+          <span className="eyebrow">Break-even risk</span>
+          <b className="mono">{Number.isFinite(be) ? pct1(be) : 'n/a'}</b>
+          <small>act above this risk <Pill tone="amber">Assumption</Pill></small>
         </div>
       </div>
 
-      <div className="verdict-cols">
+      <Card eyebrow="Expected value per flight-hour" title="Top 15 blind flight-hours by value of acting" right={<Pill tone="amber">Scenario</Pill>}>
+        <table className="verdict-tbl">
+          <thead><tr><th>Flight-hour</th><th>Region</th><th>Risk</th><th>Expected cost</th><th>Value if acted</th><th>Call</th></tr></thead>
+          <tbody>
+            {money.top.map((r, i) => (
+              <tr key={r.id}>
+                <td className="mono">{r.id.slice(0, 10)}</td>
+                <td>{r.region}</td>
+                <td className="mono">{pct1(r.risk)}</td>
+                <td className="mono">{usd(r.cost)}</td>
+                <td className="mono">{usd(r.value)}</td>
+                <td><Pill tone={r.value > 0 && i < capacity ? 'green' : 'neutral'}>{r.value > 0 && i < capacity ? 'Act' : 'Monitor'}</Pill></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="verdict-note">The model predicts risk, not cause. Costs use editable assumptions: {usd(a.disruptionCost)} per disruption, {usd(a.interventionCost)} per intervention, {pct(a.preventRate)} prevented.</p>
+      </Card>
+
+      <div className="verdict-cols verdict-cols--one">
         <Card eyebrow="Weekly scenario" title={`Cut-off ${num(cutoff, 2)}`} right={<Pill tone="amber">Scenario</Pill>}>
           <Slider label="Cut-off" value={cutoff} min={0} max={1} step={0.01} onChange={setCutoff} format={(v: number) => num(v, 2)} />
           <div className="verdict-chips">
@@ -103,17 +133,6 @@ export default function Verdict() {
           <NavLink to="/impact" className="verdict-link">Edit assumptions in Impact model ↗</NavLink>
         </Card>
 
-        <Card eyebrow="Ranking quality" title="Disruption rate by risk quartile" right={<Pill tone="green">Validation</Pill>}>
-          <div className="verdict-q">
-            {quarters.map((q) => (
-              <div key={q.label} className="verdict-q__col">
-                <span className="mono">{pct1(q.rate)}</span>
-                <div className="verdict-q__bar"><i style={{ height: `${Math.max(2, q.rate * 100)}%` }} /></div>
-                <small>{q.label}<br />{q.n} flight-hours</small>
-              </div>
-            ))}
-          </div>
-        </Card>
       </div>
 
       <Card eyebrow="Gate checklist" title="Pilot gates">

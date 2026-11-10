@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { data } from '../lib/data'
 import { predict, baseline, contributions } from '../lib/scoring'
 import { useApp, REGIONS } from '../lib/store'
@@ -48,19 +49,49 @@ function download(name: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+const Ic = ({ children }: { children: ReactNode }) => (
+  <svg className="ops-ic" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
+)
+const IcSearch = () => <Ic><circle cx="9" cy="9" r="5.5" /><path d="M13.2 13.2L17 17" /></Ic>
+const IcFilter = () => <Ic><path d="M3 5h14M6 10h8M8.5 15h3" /></Ic>
+const IcDown = () => <Ic><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5M4 16h12" /></Ic>
+const IcFlag = () => <Ic><path d="M5 17V3.5M5 4h9l-2 3 2 3H5" /></Ic>
+const IcEye = () => <Ic><path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z" /><circle cx="10" cy="10" r="2.2" /></Ic>
+const IcCloud = () => <Ic><path d="M6 14.5h8a3 3 0 0 0 .4-6A4.5 4.5 0 0 0 5.8 7.6 3.4 3.4 0 0 0 6 14.5z" /></Ic>
+const IcClock = () => <Ic><circle cx="10" cy="10" r="7" /><path d="M10 6v4l2.5 2" /></Ic>
+const IcPlay = () => <svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M6 4l10 6-10 6z" /></svg>
+const IcPause = () => <svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M5 4h3.5v12H5zM11.5 4H15v12h-3.5z" /></svg>
+
+type Toggles = { flagged: boolean; manual: boolean; severe: boolean; short: boolean }
+const RISKS = [0, 0.3, 0.5, 0.7, 0.9]
+
 export default function Ops() {
   const cutoff = useApp((s) => s.cutoff)
   const setCutoff = useApp((s) => s.setCutoff)
   const capacity = useApp((s) => s.capacity)
   const setCapacity = useApp((s) => s.setCapacity)
-  const regions = useApp((s) => s.regions)
-  const toggleRegion = useApp((s) => s.toggleRegion)
   const selectedId = useApp((s) => s.selectedId)
   const setSelectedId = useApp((s) => s.setSelectedId)
   const [open, setOpen] = useState(false)
   const [acked, setAcked] = useState<Set<string>>(new Set())
   const toggleAck = (id: string) => setAcked((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const pick = (id: string) => { setSelectedId(id); setOpen(true) }
+
+  const [q, setQ] = useState('')
+  const [region, setRegion] = useState<string>('all')
+  const [maxBuf, setMaxBuf] = useState<number>(0)
+  const [tg, setTg] = useState<Toggles>({ flagged: true, manual: true, severe: false, short: false })
+  const [fOpen, setFOpen] = useState(false)
+  const fRef = useRef<HTMLDivElement>(null)
+  const setT = (k: keyof Toggles, v?: boolean) => setTg((c) => ({ ...c, [k]: v ?? !c[k] }))
+  useEffect(() => {
+    if (!fOpen) return
+    const dn = (e: MouseEvent) => { if (fRef.current && !fRef.current.contains(e.target as Node)) setFOpen(false) }
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setFOpen(false) }
+    document.addEventListener('mousedown', dn)
+    window.addEventListener('keydown', k)
+    return () => { document.removeEventListener('mousedown', dn); window.removeEventListener('keydown', k) }
+  }, [fOpen])
 
   const rows: QRow[] = useMemo(
     () =>
@@ -74,26 +105,30 @@ export default function Ops() {
     [],
   )
 
+  const winMin = data.business.decisionWindowMin
   const span = useMemo(() => {
     const ts = data.queue.map((r) => tms(r.observedAt))
-    return { t0: Math.min(...ts), t1: Math.max(...ts) }
-  }, [])
-  const winMin = data.business.decisionWindowMin
-  const [now, setNow] = useState(span.t0)
+    const t0 = Math.min(...ts), t1 = Math.max(...ts)
+    return { t0, t1, live: Math.max(t0, t1 - winMin * MIN) }
+  }, [winMin])
+  const [now, setNow] = useState(span.live)
   const [playing, setPlaying] = useState(false)
   const nowRef = useRef(now)
   nowRef.current = now
+  const atLive = now >= span.live
   useEffect(() => {
     if (!playing) return
     const id = setInterval(() => {
-      if (nowRef.current + MIN >= span.t1) { setNow(span.t1); setPlaying(false) } else setNow(nowRef.current + MIN)
+      if (nowRef.current + MIN >= span.live) { setNow(span.live); setPlaying(false) } else setNow(nowRef.current + MIN)
     }, 250)
     return () => clearInterval(id)
-  }, [playing, span.t1])
+  }, [playing, span.live])
   const togglePlay = () => {
-    if (!playing && now >= span.t1) setNow(span.t0)
+    if (!playing && now >= span.live) setNow(span.t0)
     setPlaying((v) => !v)
   }
+  const goLive = () => { setPlaying(false); setNow(span.live) }
+  const seek = (t: number) => { setPlaying(false); setNow(Math.min(span.live, Math.max(span.t0, Math.round(t / MIN) * MIN))) }
 
   const issues = useMemo(
     () =>
@@ -103,21 +138,26 @@ export default function Ops() {
         .sort((a, b) => a.t - b.t),
     [],
   )
-  const winIssues = issues.filter((i) => i.t >= now && i.t <= now + winMin * MIN && regions.includes(i.segment))
+
+  const needle = q.trim().toLowerCase()
+  const match = (id: string, seg: string) => !needle || id.toLowerCase().includes(needle) || seg.toLowerCase().includes(needle)
+  const regionOk = (seg: string) => region === 'all' || seg === region
 
   const view = useMemo(() => {
     const inWin = rows.filter((r) => { const t = tms(r.observedAt); return t >= now && t <= now + winMin * MIN })
-    const inRegion = inWin.filter((r) => regions.includes(r.segment))
-    const flagged = inRegion.filter((r) => r.p >= cutoff)
+    const base = inWin.filter((r) => regionOk(r.segment) && match(r.id, r.segment)
+      && (!tg.severe || r.x2 >= 0.7) && (!tg.short || r.x3 <= 15) && (!maxBuf || r.x3 <= maxBuf))
+    const flagged = base.filter((r) => r.p >= cutoff)
     const actions = flagged.slice(0, capacity)
-    const byRegion = REGIONS.map((g) => {
-      const all = inWin.filter((r) => r.segment === g)
-      const fl = all.filter((r) => r.p >= cutoff)
-      const act = actions.filter((r) => r.segment === g)
-      return { g, total: all.length, flagged: fl.length, acted: act.length, avg: all.length ? all.reduce((s, r) => s + r.p, 0) / all.length : 0 }
-    })
-    return { inRegion, flagged, actions, byRegion }
-  }, [rows, regions, cutoff, capacity, now, winMin])
+    const over = flagged.slice(capacity)
+    const below = tg.flagged ? [] : base.filter((r) => r.p < cutoff)
+    const manual = tg.manual
+      ? issues.filter((i) => i.t >= now && i.t <= now + winMin * MIN && regionOk(i.segment) && match(i.id, i.segment) && !tg.severe && !tg.short && !maxBuf)
+      : []
+    const manualAll = issues.filter((i) => i.t >= now && i.t <= now + winMin * MIN && regionOk(i.segment)).length
+    return { due: base.length, flagged, actions, over, below, manual, manualAll }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, issues, region, needle, cutoff, capacity, now, winMin, tg, maxBuf])
 
   useEffect(() => {
     if (!open) return
@@ -127,7 +167,6 @@ export default function Ops() {
   }, [open])
 
   const selected = rows.find((r) => r.id === selectedId) ?? rows[0]
-  const overflow = Math.max(0, view.flagged.length - view.actions.length)
   const ackN = view.actions.filter((r) => acked.has(r.id)).length
 
   const exportCsv = () => {
@@ -139,146 +178,176 @@ export default function Ops() {
     download('next-hour-action-list.csv', lines.join('\n') + '\n')
   }
 
+  const chips: { k: string; label: string; off: () => void }[] = []
+  if (region !== 'all') chips.push({ k: 'r', label: `Region: ${region}`, off: () => setRegion('all') })
+  if (cutoff > 0) chips.push({ k: 'c', label: `Risk ≥ ${pct(cutoff)}`, off: () => setCutoff(0) })
+  if (maxBuf) chips.push({ k: 'b', label: `Buffer ≤ ${maxBuf} min`, off: () => setMaxBuf(0) })
+  if (tg.severe) chips.push({ k: 's', label: 'Severe weather', off: () => setT('severe', false) })
+  if (tg.short) chips.push({ k: 'sb', label: 'Short buffer', off: () => setT('short', false) })
+  if (!tg.manual) chips.push({ k: 'm', label: 'Manual check hidden', off: () => setT('manual', true) })
+  if (!tg.flagged) chips.push({ k: 'f', label: 'All scored', off: () => setT('flagged', true) })
+  const nFilters = chips.length
+
+  const riskOpts = RISKS.includes(cutoff) ? RISKS : [...RISKS, cutoff].sort((a, b) => a - b)
+
+  const rowEl = (r: QRow, cls: string, i: number) => {
+    const s = suggest(r)
+    const done = acked.has(r.id)
+    return (
+      <tr key={r.id} className={'is-click' + cls + (r.id === selected?.id && open ? ' is-on' : '') + (done ? ' is-ack' : '')} onClick={() => pick(r.id)} data-i={i}>
+        <td className="mono">in {Math.max(0, Math.round((tms(r.observedAt) - now) / MIN))} min</td>
+        <td className="mono">{r.id}</td>
+        <td className="ops-cap-n">{r.segment}</td>
+        <td>
+          <div className="q-prob">
+            <span className="mono">{pct1(r.p)}</span>
+            <Bar value={r.p} max={1} color={cls ? 'var(--faint)' : 'var(--coral)'} height={4} />
+          </div>
+        </td>
+        <td className="q-num mono">{num(r.x1, 0)}</td>
+        <td>{r.x2 >= 0.7 ? <Pill tone="coral">Severe {num(r.x2, 2)}</Pill> : <span className="mono">{num(r.x2, 2)}</span>}</td>
+        <td className="q-num mono">{num(r.x3, 0)} min</td>
+        <td>{cls ? <span className="ops-owner">Monitor only</span> : <Pill tone="navy">{s.action}</Pill>}</td>
+        <td className="ops-owner">{s.owner.replace('Owner: ', '')}</td>
+        <td>
+          {!cls && (
+            <button className={'btn ops-ack' + (done ? ' is-on' : '')} aria-pressed={done} onClick={(e) => { e.stopPropagation(); toggleAck(r.id) }}>
+              {done ? 'Acknowledged' : 'Acknowledge'}
+            </button>
+          )}
+        </td>
+      </tr>
+    )
+  }
+  const sepEl = (label: string, n: number, k: string) => (
+    <tr className="ops-sep" key={k}><td colSpan={10}><span>{label}</span><b className="mono">{n}</b></td></tr>
+  )
+  const empty = !view.actions.length && !view.over.length && !view.below.length && !view.manual.length
+
   return (
     <div className="page ops-page">
       <div className="ops-bar">
         <div className="ops-bar__row">
           <h1 className="ops-title">Next {winMin} minutes</h1>
+          <span className={'ops-live' + (atLive ? ' is-live' : '')}><i />{atLive ? 'Live' : 'Replay'}</span>
+          <span className="mono ops-clock__t">{hhmm(now)}</span>
           <div className="ops-clock">
-            <button className="btn btn--primary" onClick={togglePlay}>{playing ? 'Pause' : 'Auto-play'}</button>
-            <input
-              type="range" className="ops-range" aria-label="Current time"
-              min={0} max={Math.round((span.t1 - span.t0) / MIN)} step={1}
-              value={Math.round((now - span.t0) / MIN)}
-              onChange={(e) => { setPlaying(false); setNow(span.t0 + Number(e.target.value) * MIN) }}
-            />
-            <span className="mono ops-clock__t">Now {hhmm(now)}</span>
+            <button className="ops-icb" onClick={togglePlay} aria-label={playing ? 'Pause replay' : 'Play replay'}>{playing ? <IcPause /> : <IcPlay />}</button>
+            <button className="btn ops-golive" onClick={goLive} disabled={atLive}>Live</button>
           </div>
-          <div className="q-chips ops-chips">
-            {REGIONS.map((g) => (
-              <button key={g} className={'q-chip' + (regions.includes(g) ? ' is-on' : '')} aria-pressed={regions.includes(g)} onClick={() => toggleRegion(g)}>
-                {g}
-              </button>
+          <div className="ops-kpis">
+            <Stat label={`Due in ${winMin} min`} value={num(view.due)} />
+            <Stat label="Flagged" value={num(view.flagged.length)} sub={`≥ ${pct(cutoff)}`} />
+            <Stat label="Action list" value={`${view.actions.length} / ${capacity}`} tone="coral" sub={`${ackN} ack`} />
+            <Stat label="Manual check" value={num(view.manualAll)} />
+          </div>
+        </div>
+        <Timeline rows={rows} issues={issues} span={span} now={now} winMs={winMin * MIN} onSeek={seek} />
+        <div className="ops-find">
+          <label className="ops-search">
+            <IcSearch />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search flight-hour or region" aria-label="Search flight-hours" />
+          </label>
+          <div className="ops-chipsrow">
+            {chips.map((c) => (
+              <button key={c.k} className="ops-fchip" onClick={c.off} aria-label={`Remove filter ${c.label}`}>{c.label}<span aria-hidden="true">×</span></button>
             ))}
           </div>
-        </div>
-        <div className="ops-bar__row ops-bar__row--ctl">
-          <div className="ops-ctl"><Slider label="Capacity / hour" value={capacity} min={5} max={80} step={1} onChange={setCapacity} format={(v) => num(v)} /></div>
-          <div className="ops-ctl"><Slider label="Risk cut-off" value={cutoff} min={0.05} max={0.95} step={0.01} onChange={setCutoff} format={pct} /></div>
-          <div className="ops-tlwrap">
-            <Timeline rows={rows} issues={issues} span={span} now={now} winMs={winMin * MIN} onSet={(t) => { setPlaying(false); setNow(t) }} />
+          <div className="ops-step" aria-label="Capacity per hour">
+            <span>Capacity</span>
+            <button className="ops-icb" onClick={() => setCapacity(Math.max(1, capacity - 1))} aria-label="Decrease capacity">−</button>
+            <b className="mono">{capacity}</b>
+            <button className="ops-icb" onClick={() => setCapacity(Math.min(200, capacity + 1))} aria-label="Increase capacity">+</button>
           </div>
+          <div className="ops-pop" ref={fRef}>
+            <button className={'ops-icb' + (fOpen || nFilters ? ' is-on' : '')} onClick={() => setFOpen((v) => !v)} aria-label="Filters" aria-expanded={fOpen}><IcFilter /></button>
+            {fOpen && (
+              <div className="ops-popcard" role="dialog" aria-label="Filters">
+                <ul className="ops-tog">
+                  {([
+                    ['flagged', 'Flagged only', <IcFlag key="a" />],
+                    ['manual', 'Manual check', <IcEye key="b" />],
+                    ['severe', 'Severe weather', <IcCloud key="c" />],
+                    ['short', 'Short buffer', <IcClock key="d" />],
+                  ] as [keyof Toggles, string, ReactNode][]).map(([k, label, ic]) => (
+                    <li key={k}>
+                      <button onClick={() => setT(k)} aria-pressed={tg[k]}>
+                        {ic}<span>{label}</span><i className={'ops-sw' + (tg[k] ? ' is-on' : '')} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <hr />
+                <div className="ops-sel">
+                  <label>Region
+                    <select value={region} onChange={(e) => setRegion(e.target.value)}>
+                      <option value="all">All</option>
+                      {REGIONS.map((g) => <option key={g} value={g}>{g[0].toUpperCase() + g.slice(1)}</option>)}
+                    </select>
+                  </label>
+                  <label>Min risk
+                    <select value={cutoff} onChange={(e) => setCutoff(Number(e.target.value))}>
+                      {riskOpts.map((v) => <option key={v} value={v}>{v === 0 ? 'All' : pct(v)}</option>)}
+                    </select>
+                  </label>
+                  <label>Max buffer
+                    <select value={maxBuf} onChange={(e) => setMaxBuf(Number(e.target.value))}>
+                      <option value={0}>All</option>
+                      <option value={15}>15 min</option>
+                      <option value={30}>30 min</option>
+                    </select>
+                  </label>
+                  <label>Capacity / hour
+                    <select value={capacity} onChange={(e) => setCapacity(Number(e.target.value))}>
+                      {[...new Set([5, 10, 15, 20, 25, 30, 40, 60, capacity])].sort((a, b) => a - b).map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+          <button className="ops-icb" onClick={exportCsv} aria-label="Export action list as CSV" title="Export CSV"><IcDown /></button>
         </div>
-      </div>
-
-      <div className="ops-kpis">
-        <Stat label="Due in window" value={num(view.inRegion.length)} sub={`next ${winMin} min`} />
-        <Stat label="Flagged" value={num(view.flagged.length)} sub={`cut-off ${pct(cutoff)}`} />
-        <Stat label="Action list" value={num(view.actions.length)} sub={`capacity ${num(capacity)}`} tone="coral" />
-        <Stat label="Over capacity" value={num(overflow)} sub={overflow ? 'monitor only' : 'none'} />
-        <Stat label="Acknowledged" value={`${ackN} / ${view.actions.length}`} sub="this shift" />
-        <Stat label="No model score" value={num(winIssues.length)} sub="manual check" />
       </div>
 
       <div className="ops-main">
-        <Card
-          eyebrow="Prediction"
-          title="Action list"
-          right={
-            <div className="q-actions">
-              <span className="ops-tag">Heuristic actions</span>
-              <button className="btn btn--primary" onClick={exportCsv}>Export CSV</button>
-            </div>
-          }
-          flush
-        >
-          <div className="q-scroll ops-scroll">
-            <table className="tbl q-tbl ops-tbl">
-              <thead>
-                <tr>
-                  <th>Due</th>
-                  <th>Flight-hour</th>
-                  <th>Region</th>
-                  <th>Risk</th>
-                  <th className="q-num">Queue</th>
-                  <th>Weather</th>
-                  <th className="q-num">Buffer</th>
-                  <th>Suggested action</th>
-                  <th>Owner</th>
-                  <th />
+        <div className="q-scroll">
+          <table className="tbl q-tbl ops-tbl">
+            <thead>
+              <tr>
+                <th>Due</th>
+                <th>Flight-hour</th>
+                <th>Region</th>
+                <th>Risk</th>
+                <th className="q-num">Queue</th>
+                <th>Weather</th>
+                <th className="q-num">Buffer</th>
+                <th>Suggested action <span className="ops-tag">Heuristic</span></th>
+                <th>Owner</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {view.actions.map((r, i) => rowEl(r, '', i))}
+              {view.over.length > 0 && sepEl('Over capacity · monitor', view.over.length, 'sep-over')}
+              {view.over.map((r, i) => rowEl(r, ' is-over', i))}
+              {view.below.length > 0 && sepEl('Below cut-off', view.below.length, 'sep-below')}
+              {view.below.map((r, i) => rowEl(r, ' is-over', i))}
+              {view.manual.length > 0 && sepEl('Manual check · no model score', view.manual.length, 'sep-man')}
+              {view.manual.map((i) => (
+                <tr key={i.id} className="ops-man">
+                  <td className="mono">in {Math.max(0, Math.round((i.t - now) / MIN))} min</td>
+                  <td className="mono">{i.id}</td>
+                  <td className="ops-cap-n">{i.segment}</td>
+                  <td><Pill tone="neutral">Manual check</Pill></td>
+                  <td colSpan={6} className="ops-owner">{i.reason}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {view.actions.map((r) => {
-                  const s = suggest(r)
-                  const done = acked.has(r.id)
-                  return (
-                    <tr key={r.id} className={'is-click' + (r.id === selected?.id && open ? ' is-on' : '') + (done ? ' is-ack' : '')} onClick={() => pick(r.id)}>
-                      <td className="mono">in {Math.max(0, Math.round((tms(r.observedAt) - now) / MIN))} min</td>
-                      <td className="mono">{r.id}</td>
-                      <td className="ops-cap-n">{r.segment}</td>
-                      <td>
-                        <div className="q-prob">
-                          <span className="mono">{pct1(r.p)}</span>
-                          <Bar value={r.p} max={1} color="var(--coral)" height={4} />
-                        </div>
-                      </td>
-                      <td className="q-num mono">{num(r.x1, 0)}</td>
-                      <td>{r.x2 >= 0.7 ? <Pill tone="coral">Severe {num(r.x2, 2)}</Pill> : <span className="mono">{num(r.x2, 2)}</span>}</td>
-                      <td className="q-num mono">{num(r.x3, 0)} min</td>
-                      <td><Pill tone="navy">{s.action}</Pill></td>
-                      <td className="ops-owner">{s.owner.replace('Owner: ', '')}</td>
-                      <td>
-                        <button
-                          className={'btn ops-ack' + (done ? ' is-on' : '')}
-                          aria-pressed={done}
-                          onClick={(e) => { e.stopPropagation(); toggleAck(r.id) }}
-                        >
-                          {done ? 'Acknowledged' : 'Acknowledge'}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {!view.actions.length && (
-                  <tr><td colSpan={10} className="q-empty">No flight-hour above the cut-off due in this window.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <div className="ops-side">
-          <Card eyebrow="No model score" title="Issues · manual check">
-            <p className="q-count mono">{winIssues.length} in window, {issues.length} in blind set</p>
-            {winIssues.length ? (
-              <ul className="ops-issues">
-                {winIssues.map((i) => (
-                  <li key={i.id}>
-                    <span className="mono">{i.id}</span>
-                    <span>{i.reason}</span>
-                    <span className="mono ops-owner">in {Math.max(0, Math.round((i.t - now) / MIN))} min</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="q-empty">No unscored flight-hour in this window.</p>
-            )}
-          </Card>
-
-          <Card eyebrow="Region load" title="Flagged by region">
-            <div className="ops-load">
-              {view.byRegion.map((b) => (
-                <div key={b.g} className={'ops-load__row' + (regions.includes(b.g) ? '' : ' is-off')}>
-                  <span className="ops-load__name">{b.g}</span>
-                  <Bar value={b.flagged} max={Math.max(1, ...view.byRegion.map((x) => x.flagged))} color="var(--navy)" height={8} />
-                  <span className="mono ops-load__n">{b.flagged} flagged</span>
-                  <span className="mono ops-load__n">{regions.includes(b.g) ? b.acted : 0} listed</span>
-                  <span className="mono ops-load__n">avg {pct(b.avg)}</span>
-                </div>
               ))}
-            </div>
-          </Card>
+              {empty && (
+                <tr><td colSpan={10} className="q-empty">Nothing matches in this window.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -483,31 +552,48 @@ function Detail({ row, cutoff }: { row: QRow; cutoff: number }) {
   )
 }
 
-function Timeline({ rows, issues, span, now, winMs, onSet }: {
+/** Scrubber + activity strip share one container: same left/right edges, x-domain [t0, t1]. */
+function Timeline({ rows, issues, span, now, winMs, onSeek }: {
   rows: QRow[]
   issues: { id: string; t: number }[]
-  span: { t0: number; t1: number }
+  span: { t0: number; t1: number; live: number }
   now: number
   winMs: number
-  onSet: (t: number) => void
+  onSeek: (t: number) => void
 }) {
-  const W = 600, H = 56
+  const ref = useRef<HTMLDivElement>(null)
   const range = Math.max(1, span.t1 - span.t0)
-  const x = (t: number) => ((t - span.t0) / range) * W
-  const set = (e: React.MouseEvent<SVGSVGElement>) => {
-    const b = e.currentTarget.getBoundingClientRect()
-    const f = Math.min(1, Math.max(0, (e.clientX - b.left) / b.width))
-    onSet(Math.round((span.t0 + f * range) / MIN) * MIN)
+  const f = (t: number) => Math.min(100, Math.max(0, ((t - span.t0) / range) * 100))
+  const at = (e: { clientX: number }) => {
+    const b = ref.current!.getBoundingClientRect()
+    onSeek(span.t0 + Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)) * range)
   }
-  const ws = Math.max(0, x(now)), we = Math.min(W, x(now + winMs))
+  const drag = useRef(false)
   return (
-    <svg className="ops-tl" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Timeline of blind flight-hours by risk" onClick={set} onMouseMove={(e) => { if (e.buttons === 1) set(e) }}>
-      <rect x={ws} y={0} width={Math.max(2, we - ws)} height={H} fill="var(--coral-soft)" />
-      <line x1={ws} x2={ws} y1={0} y2={H} stroke="var(--coral-deep)" strokeWidth={2} />
-      {issues.map((i) => <rect key={i.id} x={x(i.t) - 1} y={H - 8} width={2} height={6} fill="var(--muted)" />)}
-      {rows.map((r) => (
-        <circle key={r.id} cx={x(tms(r.observedAt))} cy={4 + (1 - r.p) * (H - 20)} r={2} fill={r.p >= 0.5 ? 'var(--coral)' : 'var(--navy)'} opacity={0.35 + 0.65 * r.p} />
-      ))}
-    </svg>
+    <div
+      className="ops-scrub" ref={ref} role="slider" tabIndex={0} aria-label="Current time"
+      aria-valuemin={0} aria-valuemax={Math.round((span.live - span.t0) / MIN)} aria-valuenow={Math.round((now - span.t0) / MIN)} aria-valuetext={hhmm(now)}
+      onPointerDown={(e) => { drag.current = true; e.currentTarget.setPointerCapture(e.pointerId); at(e) }}
+      onPointerMove={(e) => { if (drag.current) at(e) }}
+      onPointerUp={() => { drag.current = false }}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); onSeek(now - 5 * MIN) }
+        if (e.key === 'ArrowRight') { e.preventDefault(); onSeek(now + 5 * MIN) }
+      }}
+    >
+      <div className="ops-scrub__track">
+        <i className="ops-scrub__fill" style={{ width: `${f(now)}%` }} />
+        <i className="ops-scrub__thumb" style={{ left: `${f(now)}%` }} />
+      </div>
+      <div className="ops-tl" aria-hidden="true">
+        <i className="ops-tl__win" style={{ left: `${f(now)}%`, width: `${Math.max(0.3, f(now + winMs) - f(now))}%` }} />
+        <i className="ops-tl__beyond" style={{ left: `${f(span.live)}%`, right: 0 }} />
+        <i className="ops-tl__now" style={{ left: `${f(now)}%` }} />
+        {issues.map((i) => <i key={i.id} className="ops-tl__iss" style={{ left: `${f(i.t)}%` }} />)}
+        {rows.map((r) => (
+          <i key={r.id} className={'ops-tl__dot' + (r.p >= 0.5 ? ' is-hi' : '')} style={{ left: `${f(tms(r.observedAt))}%`, top: `${4 + (1 - r.p) * 28}px`, opacity: 0.35 + 0.65 * r.p }} />
+        ))}
+      </div>
+    </div>
   )
 }

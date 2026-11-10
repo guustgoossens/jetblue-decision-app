@@ -226,7 +226,7 @@ export default function Impact() {
       </Card>
 
       <div className="im-bottom">
-        <Card eyebrow="Scenario" title="Assumptions" right={<Pill tone="amber">Editable</Pill>}>
+        <Card eyebrow="Scenario" title="Assumptions" right={<Pill tone="amber">Assumption · editable</Pill>}>
           <Slider
             label="Cost per intervention"
             value={a.interventionCost}

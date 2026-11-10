@@ -6,10 +6,9 @@ import '../styles/welcome.css'
 export const TENANTS: { id: Tenant; name: string; role: string; blurb: string; home: string }[] = [
   { id: 'ops', name: 'Operations', role: 'Duty manager', blurb: 'Next-30-minute risk queue and interventions.', home: '/ops' },
   { id: 'cio', name: 'CIO', role: 'Leadership', blurb: 'Pilot summary, impact and the go / no-go gate.', home: '/cio' },
-  { id: 'data', name: 'Data team', role: 'Analysts', blurb: 'Feed health, model evidence and Genie.', home: '/repair' },
+  { id: 'data', name: 'VP of Data', role: 'Data leadership', blurb: 'Data quality, quarantined and repaired flight-hours, model registry.', home: '/repair' },
 ]
 const PILOT = [
-  { to: '/diagnosis', label: 'Diagnosis' },
   { to: '/meddpicc', label: 'MEDDPICC' },
   { to: '/experiment', label: 'Experiment' },
 ]

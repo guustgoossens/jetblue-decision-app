@@ -11,6 +11,9 @@ export const breakEven = (a: Assumptions) => {
 }
 export const REGIONS = ['north', 'south', 'east', 'west'] as const
 
+export interface GenieReply { conversationId?: string; messageId?: string; text: string; sql?: string | null; columns: string[]; rows: unknown[][]; error?: string }
+export interface GenieTurn { q: string; a?: GenieReply; failed?: string }
+
 export type Tenant = 'ops' | 'cio' | 'data'
 export const TENANT_KEY = 'jb-tenant'
 const readTenant = (): Tenant | null => {
@@ -18,6 +21,13 @@ const readTenant = (): Tenant | null => {
 }
 
 interface State {
+  genieOpen: boolean
+  setGenieOpen: (o: boolean) => void
+  genieTurns: GenieTurn[]
+  genieConv?: string
+  genieBusy: boolean
+  genieAsk: (question: string) => Promise<void>
+  genieReset: () => void
   tenant: Tenant | null
   setTenant: (t: Tenant | null) => void
   cutoff: number
@@ -36,7 +46,29 @@ interface State {
   setServer: (s: 'checking' | 'online' | 'browser') => void
 }
 
-export const useApp = create<State>()((set) => ({
+export const useApp = create<State>()((set, get) => ({
+  genieOpen: false,
+  setGenieOpen: (genieOpen) => set({ genieOpen }),
+  genieTurns: [],
+  genieConv: undefined,
+  genieBusy: false,
+  genieReset: () => set({ genieTurns: [], genieConv: undefined }),
+  genieAsk: async (question) => {
+    const q = question.trim()
+    if (!q || get().genieBusy) return
+    set((s) => ({ genieBusy: true, genieTurns: [...s.genieTurns, { q }] }))
+    const patch = (p: Partial<GenieTurn>) => set((s) => ({ genieTurns: s.genieTurns.map((x, i) => (i === s.genieTurns.length - 1 ? { ...x, ...p } : x)) }))
+    try {
+      const r = await fetch('/api/genie', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: q, conversationId: get().genieConv }) })
+      const j = (await r.json()) as GenieReply
+      if (j.conversationId) set({ genieConv: j.conversationId })
+      patch({ a: { ...j, columns: j.columns ?? [], rows: j.rows ?? [], text: j.text ?? '' } })
+    } catch (e) {
+      patch({ failed: e instanceof Error ? e.message : 'Request failed' })
+    } finally {
+      set({ genieBusy: false })
+    }
+  },
   tenant: readTenant(),
   setTenant: (tenant) => {
     try { if (tenant) sessionStorage.setItem(TENANT_KEY, tenant); else sessionStorage.removeItem(TENANT_KEY) } catch { /* ignore */ }

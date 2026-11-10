@@ -217,7 +217,7 @@ function Gates() {
             <small>{g.target}</small>
             <small>{g.note}</small>
           </div>
-          <Pill tone={g.status === 'done' ? 'green' : 'neutral'}>{g.status === 'done' ? 'Done' : 'Decided by the jury'}</Pill>
+          <Pill tone={g.status === 'done' ? 'green' : 'neutral'}>{g.status === 'done' ? 'Done' : 'Pending'}</Pill>
         </div>
       ))}
       <Note>Blind results are hidden and are not part of this app.</Note>
@@ -307,7 +307,7 @@ function Sweep() {
 
 export default function Models() {
   return (
-    <Page eyebrow="Data team · MLflow" title="Model registry">
+    <Page eyebrow="VP of Data" title="Model registry">
       <Table />
       <div className="grid2">
         <Roc />

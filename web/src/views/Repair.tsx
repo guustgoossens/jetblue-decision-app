@@ -2,68 +2,95 @@ import { useMemo, useState } from 'react'
 import { data } from '../lib/data'
 import type { Lineage } from '../lib/types'
 import { num, shortId, prettyTs } from '../lib/format'
-import { Page, Card, Stat, Pill, Seg, Note } from '../components/ui'
+import { Page, Card, Pill, Seg, Note } from '../components/ui'
 import '../styles/repair.css'
 
-type SplitKey = 'all' | 'train' | 'validation' | 'blind'
 type Rec = Lineage['rejected'][number]
-type Tab = 'rejected' | 'repaired'
 
-const SPLITS: { value: SplitKey; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'train', label: 'Train' },
-  { value: 'validation', label: 'Validation' },
-  { value: 'blind', label: 'Blind' },
-]
-
-const SHADES = ['#fc967e', '#e8795f', '#c9604a', '#a8503f', '#8a4535', '#6d392c']
 const t = (s: string) => Date.parse(s)
 const isTrue = (v: unknown) => String(v) === 'true'
 
-function Funnel() {
-  const [split, setSplit] = useState<SplitKey>('all')
+function Flow() {
   const f = data.funnel
-  const view = useMemo(() => {
-    const src = split === 'all' ? f : f.bySplit[split]
-    const expected = src.expected
-    const eligible = src.eligible
-    const rows = f.reasons.map((r) => ({
-      ...r,
-      count: split === 'all' ? r.count : (f.bySplit[split].reasons[r.key] ?? 0),
-    }))
-    return { expected, eligible, rows }
-  }, [split, f])
-  const w = (n: number) => `${view.expected ? (n / view.expected) * 100 : 0}%`
+  const n = data.naive
+  const u = n.unitRows
+  const W = 960
+  const H = 300
+  const k = 0.11
+  const NW = 14
+  const xA = 0
+  const xB = 330
+  const xC = 660
+  const uH = f.eligible * k
+  const qH = f.quarantined * k
+  const qY = uH + 40
+  const curve = (x1: number, y1: number, x2: number, y2: number, h: number, c: string) => {
+    const m = (x1 + x2) / 2
+    return (
+      <path
+        d={`M${x1} ${y1} C${m} ${y1} ${m} ${y2} ${x2} ${y2} L${x2} ${y2 + h} C${m} ${y2 + h} ${m} ${y1 + h} ${x1} ${y1 + h} Z`}
+        fill={c}
+        opacity={0.28}
+      />
+    )
+  }
+  const reasonColors = ['#c9604a', '#e8795f', '#fc967e']
+  let ry = qY - 6
+  const reasons = f.reasons.map((r, i) => {
+    const h = Math.max(r.count * k, 4)
+    const y = ry
+    ry += h + 9
+    return { ...r, y, h, c: reasonColors[i % 3] }
+  })
+  let qy0 = qY
+  const repairs = [
+    { label: 'Late revisions ignored', n: n.lateRows },
+    { label: 'Replays collapsed', n: n.replayRows },
+    { label: 'Units converted', n: (u.percent ?? 0) + (u.basis_points ?? 0) + n.commaRows },
+    { label: 'Values recovered from log', n: n.recoveryRows },
+  ]
+  const rmax = Math.max(...repairs.map((r) => r.n))
   return (
-    <Card
-      eyebrow="Funnel"
-      title="Expected to eligible"
-      right={<Seg options={SPLITS} value={split} onChange={setSplit} />}
-    >
-      <div className="rp-funnel">
-        <div className="rp-frow rp-frow--total">
-          <span>Expected</span>
-          <div className="rp-frow__bar"><div className="rp-frow__fill" style={{ width: '100%', background: 'var(--navy)' }} /></div>
-          <span className="rp-frow__n mono">{num(view.expected, 0)}</span>
-        </div>
-        {view.rows.map((r, i) => (
-          <div key={r.key}>
-            <div className={'rp-frow' + (r.count === 0 ? ' rp-frow--zero' : '')}>
-              <span>minus {r.label}</span>
-              <div className="rp-frow__bar">
-                <div className="rp-frow__fill" style={{ width: w(r.count), background: SHADES[i % SHADES.length] }} />
-              </div>
-              <span className="rp-frow__n mono">-{num(r.count, 0)}</span>
-            </div>
-            <p className="rp-explain">{r.explanation}</p>
-          </div>
-        ))}
-        <div className="rp-frow rp-frow--total">
-          <span>Eligible</span>
-          <div className="rp-frow__bar"><div className="rp-frow__fill" style={{ width: w(view.eligible), background: 'var(--green)' }} /></div>
-          <span className="rp-frow__n mono">{num(view.eligible, 0)}</span>
-        </div>
-      </div>
+    <Card eyebrow="Decision process" title="What was kept, and why" right={<Pill tone="neutral">Measured</Pill>}>
+      <svg className="rp-flow" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Flow from 2,000 expected flight-hours to usable and quarantined, with reasons and repairs">
+        {curve(xA + NW, 0, xB, 0, uH, '#365d49')}
+        {curve(xA + NW, uH, xB, qY, qH, '#c9604a')}
+        <rect x={xA} y={0} width={NW} height={uH + qH} rx="3" fill="var(--navy)" />
+        <rect x={xB} y={0} width={NW} height={uH} rx="3" fill="var(--green)" />
+        <rect x={xB} y={qY} width={NW} height={qH} rx="3" fill="var(--coral-deep)" />
+        <text x={xA + 22} y={uH * 0.35} className="rp-flow__big">{num(f.expected, 0)}</text>
+        <text x={xA + 22} y={uH * 0.35 + 18} className="rp-flow__lab">expected flight-hours</text>
+        <text x={xB + 24} y={uH * 0.35} className="rp-flow__big">{num(f.eligible, 0)}</text>
+        <text x={xB + 24} y={uH * 0.35 + 18} className="rp-flow__lab">usable ({Math.round((f.eligible / f.expected) * 100)}%)</text>
+        <text x={xB + 24} y={qY + 14} className="rp-flow__big rp-flow__big--sm">{num(f.quarantined, 0)}</text>
+        <text x={xB + 24} y={qY + 32} className="rp-flow__lab">quarantined, kept in the denominator</text>
+        {reasons.map((r) => {
+          const y0 = qy0
+          qy0 += r.count * k
+          return (
+            <g key={r.key}>
+              {curve(xB + NW, y0, xC, r.y, r.h, r.c)}
+              <rect x={xC} y={r.y} width={NW} height={r.h} rx="2" fill={r.c} />
+              <text x={xC + 24} y={r.y + r.h / 2 + 4} className="rp-flow__lab rp-flow__lab--ink">
+                {r.label} <tspan className="mono">{num(r.count, 0)}</tspan>
+              </text>
+            </g>
+          )
+        })}
+        <text x={xC} y={12} className="rp-flow__cap">Repairs applied inside the usable set</text>
+        {repairs.map((r, i) => {
+          const y = 28 + i * 34
+          return (
+            <g key={r.label}>
+              <text x={xC} y={y + 9} className="rp-flow__lab rp-flow__lab--ink">{r.label}</text>
+              <rect x={xC + 190} y={y} width={90} height={9} rx="4.5" fill="var(--tint)" />
+              <rect x={xC + 190} y={y} width={Math.max(3, (r.n / rmax) * 90)} height={9} rx="4.5" fill="var(--green)" />
+              <text x={xC + 290} y={y + 9} className="rp-flow__lab mono">{num(r.n, 0)}</text>
+            </g>
+          )
+        })}
+        <line x1={xB + NW} x2={xC - 12} y1={uH / 2} y2={uH / 2} stroke="var(--line)" strokeDasharray="3 4" />
+      </svg>
     </Card>
   )
 }
@@ -120,128 +147,167 @@ function GenieCallout() {
   )
 }
 
-function Lineage_() {
-  const [tab, setTab] = useState<Tab>('rejected')
+type Kind = 'rejected' | 'repaired'
+type Item = Rec & { kind: Kind }
+
+function Inspector() {
+  const [kind, setKind] = useState<Kind>('rejected')
   const [fil, setFil] = useState<string>('all')
   const [q, setQ] = useState('')
   const [sel, setSel] = useState<string | null>(null)
 
-  const list: Rec[] = tab === 'rejected' ? data.lineage.rejected : data.lineage.repaired
   const reasonInfo = (k: string) => data.funnel.reasons.find((r) => r.key === k)
-  const keyOf = (r: Rec) => (tab === 'rejected' ? r.reason : r.detail)
-  const labelOf = (k: string) => (tab === 'rejected' ? reasonInfo(k)?.label ?? k : k.replace(/ \(.*\)$/, ''))
+  const list: Item[] = useMemo(
+    () => (kind === 'rejected' ? data.lineage.rejected : data.lineage.repaired).map((r) => ({ ...r, kind })),
+    [kind],
+  )
+  const keyOf = (r: Item) => (kind === 'rejected' ? r.reason : r.detail)
+  const labelOf = (k: string) => (kind === 'rejected' ? reasonInfo(k)?.label ?? k : k.replace(/ \(.*\)$/, ''))
   const options = useMemo(() => {
     const m = new Map<string, number>()
     list.forEach((r) => m.set(keyOf(r), (m.get(keyOf(r)) ?? 0) + 1))
-    return Array.from(m.entries())
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list, tab])
+  }, [list])
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
     return list.filter((r) => (fil === 'all' || keyOf(r) === fil) && (!s || r.id.toLowerCase().includes(s)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list, tab, fil, q])
+  }, [list, fil, q])
   const rec = filtered.find((r) => r.id === sel) ?? filtered[0] ?? null
-  const random = () => {
-    if (filtered.length) setSel(filtered[Math.floor(Math.random() * filtered.length)].id)
-  }
 
   return (
     <Card
-      eyebrow="Lineage explorer"
-      title="Flight-hour lineage"
+      eyebrow="Inspection"
+      title="Quarantined and repaired flight-hours"
       right={
         <Seg
           options={[
-            { value: 'rejected' as Tab, label: `Quarantined (${data.lineage.rejected.length})` },
-            { value: 'repaired' as Tab, label: `Repaired (${data.lineage.repaired.length})` },
+            { value: 'rejected' as Kind, label: `Quarantined (${data.lineage.rejected.length})` },
+            { value: 'repaired' as Kind, label: `Repaired (${data.lineage.repaired.length})` },
           ]}
-          value={tab}
+          value={kind}
           onChange={(v) => {
-            setTab(v)
+            setKind(v)
             setFil('all')
             setSel(null)
           }}
         />
       }
     >
-      <div className="rp-chips" role="group" aria-label="Filter">
-        <button className={'rp-chip' + (fil === 'all' ? ' is-on' : '')} onClick={() => setFil('all')}>All</button>
-        {options.map(([k, c]) => (
-          <button key={k} className={'rp-chip' + (fil === k ? ' is-on' : '')} onClick={() => setFil(k)}>
-            {labelOf(k)}<small>{c}</small>
-          </button>
-        ))}
-      </div>
-      <div className="rp-tools">
-        <input className="rp-find" placeholder="Search by record id" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search record id" />
-        <button className="rp-btn" onClick={random}>Random</button>
-        <span className="eyebrow eyebrow--plain">{filtered.length} records</span>
-      </div>
-      <div className="rp-list">
-        <table className="tbl">
-          <thead>
-            <tr><th>Flight-hour</th><th>Split</th><th>{tab === 'rejected' ? 'Reason' : 'Repair'}</th></tr>
-          </thead>
-          <tbody>
-            {filtered.slice(0, 80).map((r) => (
-              <tr key={r.id} className={'is-click' + (rec?.id === r.id ? ' is-on' : '')} onClick={() => setSel(r.id)}>
-                <td className="mono">{shortId(r.id, 14)}</td>
-                <td>{r.split}</td>
-                <td>{tab === 'rejected' ? reasonInfo(r.reason)?.label ?? r.reason : r.detail}</td>
-              </tr>
+      <div className="rp-md">
+        <div className="rp-md__list">
+          <input className="rp-find" placeholder="Search flight-hour id" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search flight-hour id" />
+          <div className="rp-chips" role="group" aria-label="Filter">
+            <button className={'rp-chip' + (fil === 'all' ? ' is-on' : '')} onClick={() => setFil('all')}>All<small>{list.length}</small></button>
+            {options.map(([k, c]) => (
+              <button key={k} className={'rp-chip' + (fil === k ? ' is-on' : '')} onClick={() => setFil(k)}>
+                {labelOf(k)}<small>{c}</small>
+              </button>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={3}>No record matches.</td></tr>}
-          </tbody>
-        </table>
+          </div>
+          <div className="rp-list">
+            <table className="tbl">
+              <thead>
+                <tr><th>Flight-hour</th><th>Split</th><th>{kind === 'rejected' ? 'Reason' : 'Repair'}</th></tr>
+              </thead>
+              <tbody>
+                {filtered.slice(0, 120).map((r) => (
+                  <tr key={r.id} className={'is-click' + (rec?.id === r.id ? ' is-on' : '')} onClick={() => setSel(r.id)}>
+                    <td className="mono">{shortId(r.id, 14)}</td>
+                    <td>{r.split}</td>
+                    <td>{labelOf(keyOf(r))}</td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && <tr><td colSpan={3}>No record matches.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <span className="eyebrow eyebrow--plain">{filtered.length} records</span>
+        </div>
+        <div className="rp-md__detail">
+          {rec ? <Timeline rec={rec} rejected={kind === 'rejected'} reasonInfo={reasonInfo(rec.reason)} /> : <span className="rp-explain">Select a record.</span>}
+        </div>
       </div>
-      {rec && <Timeline rec={rec} rejected={tab === 'rejected'} reasonInfo={reasonInfo(rec.reason)} />}
     </Card>
   )
 }
 
+function niceStep(raw: number) {
+  const p = Math.pow(10, Math.floor(Math.log10(raw)))
+  const m = raw / p
+  return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p
+}
+
 function AxisView({ rec }: { rec: Rec }) {
   const dec = t(rec.observedAt)
-  const pts = [
-    ...rec.observations.map((o, i) => ({ k: 'o' as const, at: t(o.available_at), label: `row ${i + 1}` })),
-    ...rec.recovery.map((r, i) => ({ k: 'r' as const, at: t(r.available_at), label: `rec ${i + 1}` })),
+  const H1 = 3.6e6
+  const used = rec.observations
+    .filter((o) => t(o.available_at) <= dec)
+    .sort((a, b) => Number(b.revision) - Number(a.revision) || Number(a.source_batch === 'replay') - Number(b.source_batch === 'replay') || t(b.available_at) - t(a.available_at))[0]
+  const rows = [
+    ...rec.observations.map((o) => {
+      const at = t(o.available_at)
+      const st: 'used' | 'late' | 'sup' = at > dec ? 'late' : o === used ? 'used' : 'sup'
+      return { k: 'o' as const, at, st, label: `rev ${o.revision} · ${o.source_batch}` }
+    }),
+    ...rec.recovery.map((r) => {
+      const at = t(r.available_at)
+      return { k: 'r' as const, at, st: (at > dec ? 'late' : 'used') as 'used' | 'late', label: `recovery · ${r.field}` }
+    }),
   ].filter((p) => !Number.isNaN(p.at))
-  const all = [dec, ...pts.map((p) => p.at)]
-  const lo = Math.min(...all)
-  const hi = Math.max(...all)
-  const span = Math.max(hi - lo, 60_000)
-  const W = 640
-  const x = (v: number) => 30 + ((v - lo) / span) * (W - 60)
-  const hrs = (v: number) => {
-    const d = (v - dec) / 3.6e6
-    return (d >= 0 ? '+' : '') + (Math.abs(d) < 1 ? Math.round(d * 60) + ' min' : d.toFixed(1) + ' h')
-  }
+  const hrsArr = rows.map((r) => (r.at - dec) / H1)
+  let lo = Math.min(0, ...hrsArr)
+  let hi = Math.max(0, ...hrsArr)
+  const pad = Math.max((hi - lo) * 0.1, 0.05)
+  lo -= pad
+  hi += pad
+  const step = niceStep((hi - lo) / 5)
+  const ticks: number[] = []
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) ticks.push(Math.round(v / step) * step)
+  const W = 720
+  const L = 150
+  const R = 28
+  const T = 30
+  const rowH = 30
+  const plotH = Math.max(rows.length, 1) * rowH
+  const H = T + plotH + 52
+  const x = (h: number) => L + ((h - lo) / (hi - lo)) * (W - L - R)
+  const fmt = (h: number) => (Math.abs(step) < 1 ? h.toFixed(2) : h.toFixed(step % 1 ? 1 : 0))
+  const col = { used: 'var(--green)', late: 'var(--coral)', sup: '#9aa5a8' }
   return (
     <>
       <div className="rp-legend">
-        <span><i style={{ background: 'var(--green)' }} />Observation row, used</span>
-        <span><i style={{ background: 'var(--coral)' }} />Row after the line, ignored</span>
-        <span><i style={{ background: 'var(--navy)', borderRadius: 2 }} />Recovery value</span>
+        <span><i style={{ background: col.used }} />Used</span>
+        <span><i style={{ background: col.late }} />Ignored: arrived after decision</span>
+        <span><i style={{ background: col.sup }} />Superseded</span>
+        <span><i style={{ background: 'var(--navy)', borderRadius: 2 }} />Square = recovery value</span>
       </div>
-      <svg className="rp-axis" viewBox={`0 0 ${W} 86`} role="img" aria-label="Availability of each raw row relative to the decision time">
-        <rect x={x(dec)} y="8" width={Math.max(0, W - 30 - x(dec))} height="46" fill="var(--coral-soft)" />
-        <line x1="30" x2={W - 30} y1="34" y2="34" stroke="var(--line)" />
-        <line x1={x(dec)} x2={x(dec)} y1="4" y2="60" stroke="var(--navy)" strokeWidth="1.5" />
-        <text x={x(dec)} y="76" textAnchor="middle">decision time {prettyTs(rec.observedAt)}</text>
-        {pts.map((p, i) => {
-          const late = p.at > dec
-          const cy = p.k === 'o' ? 26 : 42
+      <svg className="rp-axis" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Availability of each raw row relative to the decision time">
+        <rect x={x(0)} y={T - 6} width={Math.max(0, W - R - x(0))} height={plotH + 6} fill="var(--coral-soft)" />
+        {ticks.map((v) => (
+          <g key={v}>
+            <line x1={x(v)} x2={x(v)} y1={T - 6} y2={T + plotH} stroke="var(--line-soft)" />
+            <text x={x(v)} y={T + plotH + 16} textAnchor="middle">{fmt(v)}</text>
+          </g>
+        ))}
+        {rows.map((r, i) => {
+          const cy = T + i * rowH + rowH / 2
           return (
             <g key={i}>
-              {p.k === 'o' ? (
-                <circle cx={x(p.at)} cy={cy} r="6" fill={late ? 'var(--coral)' : 'var(--green)'} />
+              <line x1={L} x2={W - R} y1={cy} y2={cy} stroke="var(--line-soft)" />
+              <text x={L - 12} y={cy + 3} textAnchor="end">{r.label}</text>
+              {r.k === 'o' ? (
+                <circle cx={x((r.at - dec) / H1)} cy={cy} r="6" fill={col[r.st]} />
               ) : (
-                <rect x={x(p.at) - 5} y={cy - 5} width="10" height="10" rx="2" fill={late ? 'var(--coral)' : 'var(--navy)'} />
+                <rect x={x((r.at - dec) / H1) - 5} y={cy - 5} width="10" height="10" rx="2" fill={r.st === 'late' ? col.late : 'var(--navy)'} />
               )}
-              <text x={x(p.at)} y={p.k === 'o' ? 16 : 58} textAnchor="middle">{p.label} {hrs(p.at)}</text>
             </g>
           )
         })}
+        <line x1={x(0)} x2={x(0)} y1={T - 14} y2={T + plotH} stroke="var(--navy)" strokeWidth="1.5" />
+        <text x={x(0)} y={T - 18} textAnchor="middle" className="rp-axis__dec">Decision time</text>
+        <text x={(L + W - R) / 2} y={H - 6} textAnchor="middle">hours relative to decision time</text>
       </svg>
     </>
   )
@@ -265,7 +331,7 @@ function Timeline({ rec, rejected, reasonInfo }: { rec: Rec; rejected: boolean; 
 
       <div className="rp-step">
         <span className="rp-step__dot">2</span>
-        <h4>Raw rows against the decision time ({rec.observations.length})</h4>
+        <h4>Raw rows against decision time ({rec.observations.length})</h4>
         <AxisView rec={rec} />
         <div className="rp-scroll">
           <table className="rp-mini">
@@ -385,20 +451,15 @@ function Findings() {
 }
 
 export default function Repair() {
-  const n = data.naive
   return (
-    <Page eyebrow="Data team · signal repair" title="Feed health">
-      <div className="grid4">
-        <Stat label="Expected" value={num(data.funnel.expected, 0)} sub="flight-hours" />
-        <Stat label="Usable" value={num(data.funnel.eligible, 0)} sub="after repair" tone="green" />
-        <Stat label="Quarantined" value={num(data.funnel.quarantined, 0)} sub="kept in denominator" tone="coral" />
-        <Stat label="Late revisions" value={num(n.lateRows, 0)} sub={`about ${num(n.lateMedianHours, 0)} h after decision (measured)`} />
-      </div>
+    <Page eyebrow="VP of Data" title="Data quality">
+      <Flow />
       <Defects />
-      <Lineage_ />
-      <Funnel />
-      <GenieCallout />
-      <Findings />
+      <Inspector />
+      <div className="grid2">
+        <GenieCallout />
+        <Findings />
+      </div>
     </Page>
   )
 }

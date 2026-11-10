@@ -6,7 +6,7 @@ import Verdict from './views/Verdict'
 import Ops from './views/Ops'
 import Impact from './views/Impact'
 import Genie from './views/Genie'
-import Diagnosis from './views/Diagnosis'
+import GenieDock from './components/GenieDock'
 import Meddpicc from './views/Meddpicc'
 import Repair from './views/Repair'
 import Models from './views/Models'
@@ -20,7 +20,6 @@ const ICONS = {
   verdict: ic(<><circle cx="12" cy="12" r="9" /><path d="m8 12.5 3 3 5-6" /></>),
   queue: ic(<><path d="M4 6h16M4 12h11M4 18h7" /></>),
   cutoff: ic(<><path d="M4 12h16" /><circle cx="9" cy="12" r="2.4" fill="var(--card)" /><path d="M4 6h16M4 18h16" opacity=".4" /></>),
-  diagnosis: ic(<><circle cx="11" cy="11" r="6" /><path d="m20 20-4.2-4.2" /></>),
   meddpicc: ic(<><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>),
   repair: ic(<><path d="M14.5 6.5a4 4 0 0 0-5 5L4 17l3 3 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z" /></>),
   models: ic(<><path d="M4 20V4M4 20h16" /><path d="m7 15 4-5 3 3 5-7" /></>),
@@ -28,6 +27,11 @@ const ICONS = {
   genie: ic(<><path d="M5 5h14v10H9l-4 4z" /><path d="M9 9.5h6M9 12h4" /></>),
 }
 
+const TENANT_ICONS: Record<Tenant, ReactNode> = {
+  ops: ICONS.queue,
+  cio: ic(<><path d="M12 3v18M16.5 7.5C16 6 14.3 5 12 5S8 6.2 8 8s1.7 2.5 4 3 4 1.2 4 3-1.8 3-4 3-4-1-4.5-2.5" /></>),
+  data: ICONS.models,
+}
 type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean }
 const NAV_BY_TENANT: Record<Tenant, NavItem[]> = {
   ops: [{ to: '/ops', label: 'Ops desk', icon: ICONS.queue }],
@@ -36,19 +40,17 @@ const NAV_BY_TENANT: Record<Tenant, NavItem[]> = {
     { to: '/impact', label: 'Impact', icon: ICONS.cutoff },
   ],
   data: [
-    { to: '/repair', label: 'Feed health', icon: ICONS.repair },
+    { to: '/repair', label: 'Data quality', icon: ICONS.repair },
     { to: '/models', label: 'Model evidence', icon: ICONS.models },
-    { to: '/genie', label: 'Ask Genie', icon: ICONS.genie },
   ],
 }
 const PILOT_FILE: NavItem[] = [
-  { to: '/diagnosis', label: 'Diagnosis', icon: ICONS.diagnosis },
   { to: '/meddpicc', label: 'MEDDPICC', icon: ICONS.meddpicc },
   { to: '/experiment', label: 'Experiment', icon: ICONS.experiment },
 ]
 const PAGE_NAMES: Record<string, string> = {
-  '/cio': 'Summary', '/ops': 'Ops desk', '/impact': 'Impact', '/diagnosis': 'Diagnosis',
-  '/meddpicc': 'MEDDPICC', '/experiment': 'Experiment', '/repair': 'Feed health', '/models': 'Model evidence', '/genie': 'Ask Genie',
+  '/cio': 'Summary', '/ops': 'Ops desk', '/impact': 'Impact',
+  '/meddpicc': 'MEDDPICC', '/experiment': 'Experiment', '/repair': 'Data quality', '/models': 'Model evidence', '/genie': 'Ask Genie',
 }
 
 export default function App() {
@@ -71,6 +73,12 @@ function Shell({ tenant }: { tenant: Tenant }) {
   const setServer = useApp((s) => s.setServer)
 
   useEffect(() => { window.scrollTo(0, 0); setMenuOpen(false); setTenantOpen(false) }, [pathname])
+  useEffect(() => {
+    if (!tenantOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setTenantOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [tenantOpen])
   useEffect(() => {
     let live = true
     fetch('/api/health')
@@ -142,10 +150,16 @@ function Shell({ tenant }: { tenant: Tenant }) {
                     {TENANTS.map((t) => (
                       <button key={t.id} type="button" role="menuitemradio" aria-checked={t.id === tenant} className={`tenant__item ${t.id === tenant ? 'is-on' : ''}`}
                         onClick={() => { setTenant(t.id); setTenantOpen(false); navigate(t.home) }}>
-                        {t.name}<small>{t.role}</small>
+                        <span className="tenant__ico" aria-hidden>{TENANT_ICONS[t.id]}</span>
+                        <span className="tenant__txt">{t.name}<small>{t.blurb}</small></span>
+                        {t.id === tenant && <svg className="tenant__check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m5 12.5 4.5 4.5L19 7" /></svg>}
                       </button>
                     ))}
-                    <button type="button" role="menuitem" className="tenant__item tenant__item--out" onClick={() => { setTenant(null); navigate('/') }}>Sign out</button>
+                    <div className="tenant__sep" role="separator" />
+                    <button type="button" role="menuitem" className="tenant__item tenant__item--out" onClick={() => { setTenant(null); navigate('/') }}>
+                      <span className="tenant__ico" aria-hidden>{ic(<><path d="M9 4H5v16h4M15 8l4 4-4 4M19 12H9" /></>)}</span>
+                      <span className="tenant__txt">Sign out</span>
+                    </button>
                   </div>
                 </>
               )}
@@ -161,7 +175,6 @@ function Shell({ tenant }: { tenant: Tenant }) {
             <Route path="/ops" element={<Ops />} />
             <Route path="/impact" element={<Impact />} />
             <Route path="/genie" element={<Genie />} />
-            <Route path="/diagnosis" element={<Diagnosis />} />
             <Route path="/meddpicc" element={<Meddpicc />} />
             <Route path="/experiment" element={<Experiment />} />
             <Route path="/repair" element={<Repair />} />
@@ -169,6 +182,7 @@ function Shell({ tenant }: { tenant: Tenant }) {
             <Route path="*" element={<Navigate to={info.home} replace />} />
           </Routes>
         </main>
+        <GenieDock tenant={tenant} />
         <footer className="footer">X-HEC classroom project. Synthetic data on a fictionalized case. Not affiliated with or endorsed by JetBlue.</footer>
       </div>
     </div>
