@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Card, Pill, Slider } from '../components/ui';
 import { data, champion, dummy } from '../lib/data';
@@ -12,6 +13,19 @@ import '../styles/verdict.css';
 
 type Tone = 'neutral' | 'coral' | 'green' | 'navy' | 'amber';
 type Choice = 'go' | 'nogo' | null;
+
+function CostInfo({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="verdict-info">
+      <div className="verdict-info__heading">
+        <span className="eyebrow">{label}</span>
+        <button type="button" className="verdict-info__button" aria-label={`How ${label.toLowerCase()} is calculated`} aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>i</button>
+      </div>
+      <p id={id} className="verdict-info__text" hidden={!open}>{children}</p>
+    </div>
+  );
+}
 
 export default function Verdict() {
   const cutoff = useApp((s) => s.cutoff);
@@ -40,6 +54,9 @@ export default function Verdict() {
     };
   }, [a, capacity]);
   const be = breakEven(a);
+  const costOverlap = money.shiftN === money.totalN
+    ? `Both totals match because all ${money.totalN} blind-set flight-hours fall within this 12-hour window.`
+    : `The 12-hour window includes ${money.shiftN} of ${money.totalN} blind-set flight-hours; the totals cover different sets of rows.`;
 
   const biz = data.business;
   const target = biz.delaysPerWeek * (1 - biz.targetReduction);
@@ -74,12 +91,16 @@ export default function Verdict() {
 
       <div className="verdict-strip">
         <div className="verdict-kpi">
-          <span className="eyebrow">Expected disruption cost, next shift</span>
+          <CostInfo id="shift-cost-info" label="Expected disruption cost, next shift">
+            Sum of each flight-hour’s predicted disruption probability × {usd(a.disruptionCost)} per disruption, for the latest 12 hours ending at the dataset’s newest observation. This historical window is a proxy for the next shift, not a forecast of a future 12-hour period. {costOverlap} This is expected cost before intervention, not realized losses.
+          </CostInfo>
           <b className="mono">{usd(money.shiftCost)}</b>
           <small>{money.shiftN} flight-hours, last 12 h <Pill tone="amber">Assumption</Pill></small>
         </div>
         <div className="verdict-kpi">
-          <span className="eyebrow">Expected cost, blind set</span>
+          <CostInfo id="blind-cost-info" label="Expected cost, blind set">
+            Sum of each flight-hour’s predicted disruption probability × {usd(a.disruptionCost)} per disruption across all {money.totalN} blind-set flight-hours. For example, 20% risk contributes {usd(0.2 * a.disruptionCost)}. {costOverlap} Both use the champion model’s probabilities, without a risk cut-off or intervention savings; actual blind outcomes are unknown.
+          </CostInfo>
           <b className="mono">{usd(money.totalCost)}</b>
           <small>{money.totalN} flight-hours <Pill tone="amber">Assumption</Pill></small>
         </div>
