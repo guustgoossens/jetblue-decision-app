@@ -1,5 +1,5 @@
 /* Models view (md-) */
-.md-svg{width:100%;height:auto;display:block;touch-action:none}
+.md-svg{width:100%;height:auto;max-height:200px;display:block;touch-action:none}
 .md-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-top:8px}
 .md-legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
 .md-read{font-size:12px;min-height:20px;margin-top:6px;color:var(--muted)}
@@ -21,6 +21,11 @@
 .md-gate small{color:var(--muted);display:block}
 
 .md-explain{color:var(--muted);font-size:12px;margin:2px 0 0}
-.md-sweep{width:100%;height:auto;display:block}
+.md-sweep{width:100%;height:auto;max-height:200px;display:block;touch-action:none;cursor:crosshair}
+.md-chartbox{position:relative}
+.md-expand{position:absolute;top:0;right:0;z-index:2;font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
+.md-overlay{position:fixed;inset:0;z-index:1000;background:rgba(10,20,25,.55);display:grid;place-items:center;padding:24px}
+.md-overlay__body{position:relative;background:#fff;border-radius:12px;padding:32px 20px 16px;width:min(900px,95vw);max-height:92vh;overflow:auto}
+.md-overlay__body .md-svg--big{max-height:80vh}
 .md-ax{font-size:9.5px;fill:var(--muted);font-family:var(--mono)}
 @media(max-width:700px){.md-coef{grid-template-columns:1fr}}

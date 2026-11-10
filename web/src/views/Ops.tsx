@@ -1,12 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useReactTable, getCoreRowModel, getSortedRowModel, type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { data } from '../lib/data'
 import { predict, baseline, contributions } from '../lib/scoring'
-import { useApp, REGIONS } from '../lib/store'
+import { useApp, REGIONS, type OpsFilters } from '../lib/store'
 import { pct, pct1, num, signed, prettyTs } from '../lib/format'
 import type { Features, FeatureKey } from '../lib/types'
 import { Card, Pill, Slider, Note, Bar, Stat } from '../components/ui'
 import '../styles/ops.css'
+
+const NUM = new Set(['x1', 'x3'])
+const COLS: ColumnDef<QRow>[] = [
+  { id: 'due', header: 'Due' },
+  { id: 'id', header: 'Flight-hour' },
+  { id: 'segment', header: 'Region' },
+  { id: 'p', header: 'Risk' },
+  { id: 'x1', header: 'Queue' },
+  { id: 'x2', header: 'Weather' },
+  { id: 'x3', header: 'Buffer' },
+  { id: 'action', header: 'Suggested action' },
+  { id: 'owner', header: 'Owner' },
+  { id: 'ack', header: '', enableSorting: false },
+]
 
 const KEYS: FeatureKey[] = ['x1', 'x2', 'x3']
 
@@ -66,8 +81,9 @@ type Toggles = { flagged: boolean; manual: boolean; severe: boolean; short: bool
 const RISKS = [0, 0.3, 0.5, 0.7, 0.9]
 
 export default function Ops() {
-  const cutoff = useApp((s) => s.cutoff)
-  const setCutoff = useApp((s) => s.setCutoff)
+  const f = useApp((s) => s.opsFilters)
+  const setF = useApp((s) => s.setOpsFilters)
+  const cutoff = f.minRisk
   const capacity = useApp((s) => s.capacity)
   const setCapacity = useApp((s) => s.setCapacity)
   const selectedId = useApp((s) => s.selectedId)
@@ -77,13 +93,15 @@ export default function Ops() {
   const toggleAck = (id: string) => setAcked((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const pick = (id: string) => { setSelectedId(id); setOpen(true) }
 
-  const [q, setQ] = useState('')
-  const [region, setRegion] = useState<string>('all')
-  const [maxBuf, setMaxBuf] = useState<number>(0)
-  const [tg, setTg] = useState<Toggles>({ flagged: true, manual: true, severe: false, short: false })
+  const q = f.query
+  const region = f.region
+  const maxBuf = f.maxBuffer ?? 0
+  const tg: Toggles = { flagged: f.flaggedOnly, manual: f.manual, severe: f.severe, short: f.shortBuffer }
+  const TK: Record<keyof Toggles, keyof OpsFilters> = { flagged: 'flaggedOnly', manual: 'manual', severe: 'severe', short: 'shortBuffer' }
   const [fOpen, setFOpen] = useState(false)
   const fRef = useRef<HTMLDivElement>(null)
-  const setT = (k: keyof Toggles, v?: boolean) => setTg((c) => ({ ...c, [k]: v ?? !c[k] }))
+  const setT = (k: keyof Toggles, v?: boolean) => setF({ [TK[k]]: v ?? !tg[k] } as Partial<OpsFilters>)
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'p', desc: true }])
   useEffect(() => {
     if (!fOpen) return
     const dn = (e: MouseEvent) => { if (fRef.current && !fRef.current.contains(e.target as Node)) setFOpen(false) }
@@ -151,13 +169,19 @@ export default function Ops() {
     const actions = flagged.slice(0, capacity)
     const over = flagged.slice(capacity)
     const below = tg.flagged ? [] : base.filter((r) => r.p < cutoff)
+    const ord = (a: QRow[]) => {
+      const s0 = sorting[0]
+      if (!s0 || (s0.id === 'p' && s0.desc)) return a
+      const get = (r: QRow): number | string => s0.id === 'due' ? tms(r.observedAt) : s0.id === 'id' ? r.id : s0.id === 'segment' ? r.segment : s0.id === 'x1' ? r.x1 : s0.id === 'x2' ? r.x2 : s0.id === 'x3' ? r.x3 : s0.id === 'action' ? suggest(r).action : s0.id === 'owner' ? suggest(r).owner : r.p
+      return [...a].sort((x, y) => { const u = get(x), v = get(y); const c = typeof u === 'string' ? u.localeCompare(v as string) : (u as number) - (v as number); return s0.desc ? -c : c })
+    }
     const manual = tg.manual
       ? issues.filter((i) => i.t >= now && i.t <= now + winMin * MIN && regionOk(i.segment) && match(i.id, i.segment) && !tg.severe && !tg.short && !maxBuf)
       : []
     const manualAll = issues.filter((i) => i.t >= now && i.t <= now + winMin * MIN && regionOk(i.segment)).length
-    return { due: base.length, flagged, actions, over, below, manual, manualAll }
+    return { due: base.length, flagged, actions: ord(actions), over: ord(over), below: ord(below), manual, manualAll }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, issues, region, needle, cutoff, capacity, now, winMin, tg, maxBuf])
+  }, [rows, issues, region, needle, cutoff, capacity, now, winMin, f, maxBuf, sorting])
 
   useEffect(() => {
     if (!open) return
@@ -178,10 +202,15 @@ export default function Ops() {
     download('next-hour-action-list.csv', lines.join('\n') + '\n')
   }
 
+  const table = useReactTable<QRow>({
+    data: [], columns: COLS, state: { sorting }, onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(), enableSortingRemoval: false, sortDescFirst: false,
+  })
+
   const chips: { k: string; label: string; off: () => void }[] = []
-  if (region !== 'all') chips.push({ k: 'r', label: `Region: ${region}`, off: () => setRegion('all') })
-  if (cutoff > 0) chips.push({ k: 'c', label: `Risk ≥ ${pct(cutoff)}`, off: () => setCutoff(0) })
-  if (maxBuf) chips.push({ k: 'b', label: `Buffer ≤ ${maxBuf} min`, off: () => setMaxBuf(0) })
+  if (region !== 'all') chips.push({ k: 'r', label: `Region: ${region}`, off: () => setF({ region: 'all' }) })
+  if (cutoff > 0) chips.push({ k: 'c', label: `Risk ≥ ${pct(cutoff)}`, off: () => setF({ minRisk: 0 }) })
+  if (maxBuf) chips.push({ k: 'b', label: `Buffer ≤ ${maxBuf} min`, off: () => setF({ maxBuffer: null }) })
   if (tg.severe) chips.push({ k: 's', label: 'Severe weather', off: () => setT('severe', false) })
   if (tg.short) chips.push({ k: 'sb', label: 'Short buffer', off: () => setT('short', false) })
   if (!tg.manual) chips.push({ k: 'm', label: 'Manual check hidden', off: () => setT('manual', true) })
@@ -246,19 +275,8 @@ export default function Ops() {
         <div className="ops-find">
           <label className="ops-search">
             <IcSearch />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search flight-hour or region" aria-label="Search flight-hours" />
+            <input value={q} onChange={(e) => setF({ query: e.target.value })} placeholder="Search flight-hour or region" aria-label="Search flight-hours" />
           </label>
-          <div className="ops-chipsrow">
-            {chips.map((c) => (
-              <button key={c.k} className="ops-fchip" onClick={c.off} aria-label={`Remove filter ${c.label}`}>{c.label}<span aria-hidden="true">×</span></button>
-            ))}
-          </div>
-          <div className="ops-step" aria-label="Capacity per hour">
-            <span>Capacity</span>
-            <button className="ops-icb" onClick={() => setCapacity(Math.max(1, capacity - 1))} aria-label="Decrease capacity">−</button>
-            <b className="mono">{capacity}</b>
-            <button className="ops-icb" onClick={() => setCapacity(Math.min(200, capacity + 1))} aria-label="Increase capacity">+</button>
-          </div>
           <div className="ops-pop" ref={fRef}>
             <button className={'ops-icb' + (fOpen || nFilters ? ' is-on' : '')} onClick={() => setFOpen((v) => !v)} aria-label="Filters" aria-expanded={fOpen}><IcFilter /></button>
             {fOpen && (
@@ -280,18 +298,18 @@ export default function Ops() {
                 <hr />
                 <div className="ops-sel">
                   <label>Region
-                    <select value={region} onChange={(e) => setRegion(e.target.value)}>
+                    <select value={region} onChange={(e) => setF({ region: e.target.value as OpsFilters['region'] })}>
                       <option value="all">All</option>
                       {REGIONS.map((g) => <option key={g} value={g}>{g[0].toUpperCase() + g.slice(1)}</option>)}
                     </select>
                   </label>
                   <label>Min risk
-                    <select value={cutoff} onChange={(e) => setCutoff(Number(e.target.value))}>
+                    <select value={cutoff} onChange={(e) => setF({ minRisk: Number(e.target.value) })}>
                       {riskOpts.map((v) => <option key={v} value={v}>{v === 0 ? 'All' : pct(v)}</option>)}
                     </select>
                   </label>
                   <label>Max buffer
-                    <select value={maxBuf} onChange={(e) => setMaxBuf(Number(e.target.value))}>
+                    <select value={maxBuf} onChange={(e) => setF({ maxBuffer: Number(e.target.value) || null })}>
                       <option value={0}>All</option>
                       <option value={15}>15 min</option>
                       <option value={30}>30 min</option>
@@ -307,6 +325,17 @@ export default function Ops() {
             )}
           </div>
           <button className="ops-icb" onClick={exportCsv} aria-label="Export action list as CSV" title="Export CSV"><IcDown /></button>
+          <div className="ops-step" aria-label="Capacity per hour">
+            <span>Capacity</span>
+            <button className="ops-icb" onClick={() => setCapacity(Math.max(1, capacity - 1))} aria-label="Decrease capacity">−</button>
+            <b className="mono">{capacity}</b>
+            <button className="ops-icb" onClick={() => setCapacity(Math.min(200, capacity + 1))} aria-label="Increase capacity">+</button>
+          </div>
+          <div className="ops-chipsrow">
+            {chips.map((c) => (
+              <button key={c.k} className="ops-fchip" onClick={c.off} aria-label={`Remove filter ${c.label}`}>{c.label}<span aria-hidden="true">×</span></button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -314,18 +343,22 @@ export default function Ops() {
         <div className="q-scroll">
           <table className="tbl q-tbl ops-tbl">
             <thead>
-              <tr>
-                <th>Due</th>
-                <th>Flight-hour</th>
-                <th>Region</th>
-                <th>Risk</th>
-                <th className="q-num">Queue</th>
-                <th>Weather</th>
-                <th className="q-num">Buffer</th>
-                <th>Suggested action <span className="ops-tag">Heuristic</span></th>
-                <th>Owner</th>
-                <th />
-              </tr>
+              {table.getHeaderGroups().map((hg) => (
+                <tr key={hg.id}>
+                  {hg.headers.map((h) => {
+                    const dir = h.column.getIsSorted()
+                    return (
+                      <th key={h.id} className={(NUM.has(h.id) ? 'q-num ' : '') + (h.column.getCanSort() ? 'ops-th' : '')} aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : undefined}>
+                        {h.column.getCanSort() ? (
+                          <button className="ops-sortb" onClick={h.column.getToggleSortingHandler()}>
+                            {h.column.columnDef.header as ReactNode}<span className="ops-arrow" aria-hidden="true">{dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : ''}</span>
+                          </button>
+                        ) : (h.column.columnDef.header as ReactNode)}
+                      </th>
+                    )
+                  })}
+                </tr>
+              ))}
             </thead>
             <tbody>
               {view.actions.map((r, i) => rowEl(r, '', i))}
@@ -424,8 +457,8 @@ function Detail({ row, cutoff }: { row: QRow; cutoff: number }) {
   return (
     <div className="q-detail">
       <Card eyebrow="Selected flight-hour" title={row.id}>
+        <Sky sev={row.x2} />
         <dl className="q-facts">
-          <div><dt>Flight-hour</dt><dd className="mono">{row.id}</dd></div>
           <div><dt>Region</dt><dd>{row.segment}</dd></div><div><dt>Observed</dt><dd className="mono">{prettyTs(row.observedAt)}</dd></div>
           <div><dt>Outcome</dt><dd>Unknown (blind flight-hour)</dd></div>
         </dl>
@@ -594,6 +627,35 @@ function Timeline({ rows, issues, span, now, winMs, onSeek }: {
           <i key={r.id} className={'ops-tl__dot' + (r.p >= 0.5 ? ' is-hi' : '')} style={{ left: `${f(tms(r.observedAt))}%`, top: `${4 + (1 - r.p) * 28}px`, opacity: 0.35 + 0.65 * r.p }} />
         ))}
       </div>
+    </div>
+  )
+}
+
+
+function Sky({ sev }: { sev: number }) {
+  const mode = sev >= 0.7 ? 'storm' : sev >= 0.4 ? 'cloudy' : 'clear'
+  const cloud = 'M0 14c0-6 5-10 11-9 3-6 13-6 16 1 6-1 11 3 10 8z'
+  return (
+    <div className="sky-wrap">
+      <div className={'sky sky--' + mode} role="img" aria-label={`Weather severity ${num(sev, 2)}, ${mode}`}>
+        <svg viewBox="0 0 400 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          {mode === 'clear' && <circle className="sky-sun" cx="330" cy="30" r="14" />}
+          <g className="sky-c sky-c1"><path d={cloud} transform="translate(0 22) scale(1.6)" /></g>
+          <g className="sky-c sky-c2"><path d={cloud} transform="translate(0 70) scale(1.1)" /></g>
+          {mode !== 'clear' && <g className="sky-c sky-c3"><path d={cloud} transform="translate(0 40) scale(1.9)" /></g>}
+          {mode === 'storm' && (
+            <g className="sky-rain">
+              {Array.from({ length: 14 }, (_, i) => <line key={i} x1={20 + i * 28} y1={-20 - (i % 4) * 14} x2={14 + i * 28} y2={-4 - (i % 4) * 14} style={{ animationDelay: `${(i % 5) * 0.15}s` }} />)}
+            </g>
+          )}
+          <g className="sky-plane"><g className="sky-bob">
+            <path d="M0 0c6-4 22-5 34-1l8-1-5 3 5 2-9 0c-8 3-24 3-33 0z" />
+            <path d="M16-1L8-11h5l12 10zM16 3L8 12h5l12-8z" />
+          </g></g>
+          {mode === 'storm' && <rect className="sky-flash" width="400" height="120" />}
+        </svg>
+      </div>
+      <div className="sky-lab">Weather severity {num(sev, 2)} · {mode}</div>
     </div>
   )
 }

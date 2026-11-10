@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { data, champion } from '../lib/data'
 import { SCORE_KEYS, MODEL_COLOR, confusion, roc } from '../lib/metrics'
 import { useApp, LOGGED_CUTOFF } from '../lib/store'
@@ -13,6 +13,30 @@ const H = 380
 const P = 40
 const sx = (v: number) => P + v * (W - 2 * P)
 const sy = (v: number) => H - P - v * (H - 2 * P)
+
+function Expandable({ children }: { children: (big: boolean) => ReactNode }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [open])
+  return (
+    <div className="md-chartbox">
+      <button type="button" className="md-expand" onClick={() => setOpen(true)} aria-label="Expand chart">Expand</button>
+      {children(false)}
+      {open && (
+        <div className="md-overlay" role="dialog" aria-modal="true" onClick={() => setOpen(false)}>
+          <div className="md-overlay__body" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="md-expand" onClick={() => setOpen(false)}>Close (Esc)</button>
+            {children(true)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function Table() {
   return (
@@ -50,8 +74,9 @@ function Roc() {
   const labelOf = (k: string) => data.models.find((m) => m.key === k)?.label ?? k
   return (
     <Card eyebrow="ROC" title="Disruptions caught vs false alarms">
+      <Expandable>{(big) => (<>
       <svg
-        className="md-svg"
+        className={big ? 'md-svg md-svg--big' : 'md-svg'}
         viewBox={`0 0 ${W} ${H}`}
         role="img"
         aria-label="ROC curves for all models"
@@ -85,6 +110,7 @@ function Roc() {
         <text x={W / 2} y={H - 6} fontSize="10" textAnchor="middle" fill="var(--muted)">False alarm rate (flagged, no disruption)</text>
         <text x={12} y={H / 2} fontSize="10" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 12 ${H / 2})`}>True positive rate (disruptions caught)</text>
       </svg>
+      </>)}</Expandable>
       <div className="md-legend">
         {SCORE_KEYS.map((k) => (
           <span key={k}><i style={{ background: MODEL_COLOR[k] }} />{labelOf(k)}</span>
@@ -151,7 +177,8 @@ function Calibration() {
   }, [key])
   return (
     <Card eyebrow="Calibration" title="Predicted vs observed risk">
-      <svg className="md-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Reliability chart, 10 bins on validation">
+      <Expandable>{(big) => (
+      <svg className={big ? 'md-svg md-svg--big' : 'md-svg'} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Reliability chart, 10 bins on validation">
         {[0, 0.25, 0.5, 0.75, 1].map((g) => (
           <g key={g}>
             <line x1={sx(0)} x2={sx(1)} y1={sy(g)} y2={sy(g)} stroke="var(--line-soft)" />
@@ -169,6 +196,7 @@ function Calibration() {
         <text x={W / 2} y={H - 6} fontSize="10" textAnchor="middle" fill="var(--muted)">Mean predicted risk</text>
         <text x={12} y={H / 2} fontSize="10" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 12 ${H / 2})`}>Observed disruption rate</text>
       </svg>
+      )}</Expandable>
       <Note>Ten equal-width bins on validation. Dot size is the number of flight-hours. Bins with few records are noisy.</Note>
     </Card>
   )
@@ -256,7 +284,13 @@ function Sweep() {
   }, [key])
   const line = (f: (p: (typeof pts)[number]) => number) =>
     pts.map((p, i) => `${i ? 'L' : 'M'}${sx(p.t).toFixed(1)} ${sy(f(p)).toFixed(1)}`).join('')
-  const cur = pts[Math.round(cutoff * 100)]
+  const [hov, setHov] = useState<number | null>(null)
+  const cur = pts[hov ?? Math.round(cutoff * 100)]
+  const at = (e: { clientX: number; currentTarget: SVGSVGElement }) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const vb = ((e.clientX - r.left) / r.width) * W
+    return Math.round(Math.min(1, Math.max(0, (vb - P) / (W - 2 * P))) * 100)
+  }
   const series: { name: string; color: string; f: (p: (typeof pts)[number]) => number }[] = [
     { name: 'Precision', color: '#fc967e', f: (p) => p.p },
     { name: 'Recall', color: '#365d49', f: (p) => p.r },
@@ -264,21 +298,19 @@ function Sweep() {
   ]
   return (
     <Card eyebrow="Cut-off sweep" title="Metrics by cut-off">
+      <Expandable>{(big) => (<>
       <svg
-        className="md-sweep"
+        className={big ? 'md-sweep md-svg--big' : 'md-sweep'}
         viewBox={`0 0 ${W} ${H}`}
         role="img"
         aria-label="Metrics against cut-off, champion, validation"
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId)
-          const r = e.currentTarget.getBoundingClientRect()
-          setCutoff(Math.round(Math.min(1, Math.max(0, ((((e.clientX - r.left) / r.width) * W - P) / (W - 2 * P)))) * 100) / 100)
-        }}
         onPointerMove={(e) => {
-          if (!e.buttons) return
-          const r = e.currentTarget.getBoundingClientRect()
-          setCutoff(Math.round(Math.min(1, Math.max(0, ((((e.clientX - r.left) / r.width) * W - P) / (W - 2 * P)))) * 100) / 100)
+          const i = at(e)
+          setHov(i)
+          if (e.buttons) setCutoff(i / 100)
         }}
+        onPointerLeave={() => setHov(null)}
+        onPointerDown={(e) => setCutoff(at(e) / 100)}
       >
         {[0, 0.25, 0.5, 0.75, 1].map((g) => (
           <g key={g}>
@@ -291,12 +323,15 @@ function Sweep() {
           <path key={s.name} d={line(s.f)} fill="none" stroke={s.color} strokeWidth={2} />
         ))}
         <line x1={sx(cutoff)} x2={sx(cutoff)} y1={sy(0)} y2={sy(1)} stroke="var(--coral-deep)" strokeWidth={1.5} />
+        {hov !== null && <line x1={sx(hov / 100)} x2={sx(hov / 100)} y1={sy(0)} y2={sy(1)} stroke="var(--navy)" strokeWidth={1} strokeDasharray="3 3" />}
         {series.map((s) => (
-          <circle key={s.name} cx={sx(cutoff)} cy={sy(s.f(cur))} r={4} fill={s.color} stroke="#fff" strokeWidth={1.5} />
+          <circle key={s.name} cx={sx(cur.t)} cy={sy(s.f(cur))} r={4} fill={s.color} stroke="#fff" strokeWidth={1.5} />
         ))}
-        <text x={W / 2} y={H - 6} fontSize="10" textAnchor="middle" fill="var(--muted)">Cut-off (click or drag to set)</text>
+        <text x={W / 2} y={H - 6} fontSize="10" textAnchor="middle" fill="var(--muted)">Cut-off (hover to read, click or drag to set)</text>
       </svg>
-      <div className="md-legend">
+      </>)}</Expandable>
+      <div className="md-legend mono">
+        <span>Cut-off {num(cur.t, 2)}{hov === null ? ' (selected)' : ' (hover)'}</span>
         {series.map((s) => (
           <span key={s.name}><i style={{ background: s.color }} />{s.name} {num(s.f(cur), 3)}</span>
         ))}
@@ -313,15 +348,15 @@ export default function Models() {
         <Roc />
         <Calibration />
       </div>
-      <Sweep />
       <div className="grid2">
+        <Sweep />
         <Confusion />
-        <Coefs />
       </div>
       <div className="grid2">
-        <Gates />
+        <Coefs />
         <Leakage />
       </div>
+      <Gates />
     </Page>
   )
 }

@@ -36,10 +36,12 @@ type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean }
 const NAV_BY_TENANT: Record<Tenant, NavItem[]> = {
   ops: [{ to: '/ops', label: 'Ops desk', icon: ICONS.queue }],
   cio: [
+    { to: '/ask', label: 'Ask Genie', icon: ICONS.genie },
     { to: '/cio', label: 'Summary', icon: ICONS.verdict },
     { to: '/impact', label: 'Impact', icon: ICONS.cutoff },
   ],
   data: [
+    { to: '/ask', label: 'Ask Genie', icon: ICONS.genie },
     { to: '/repair', label: 'Data quality', icon: ICONS.repair },
     { to: '/models', label: 'Model evidence', icon: ICONS.models },
   ],
@@ -50,7 +52,7 @@ const PILOT_FILE: NavItem[] = [
 ]
 const PAGE_NAMES: Record<string, string> = {
   '/cio': 'Summary', '/ops': 'Ops desk', '/impact': 'Impact',
-  '/meddpicc': 'MEDDPICC', '/experiment': 'Experiment', '/repair': 'Data quality', '/models': 'Model evidence', '/genie': 'Ask Genie',
+  '/meddpicc': 'MEDDPICC', '/experiment': 'Experiment', '/repair': 'Data quality', '/models': 'Model evidence', '/genie': 'Ask Genie', '/ask': 'Ask Genie',
 }
 
 export default function App() {
@@ -168,13 +170,14 @@ function Shell({ tenant }: { tenant: Tenant }) {
             <span className={`status status--${server}`}><i />{statusText}</span>
           </div>
         </header>
-        <main className="content">
+        <main className={`content ${pathname === '/ask' ? 'content--chat' : ''}`}>
           <Routes>
             <Route path="/" element={<Navigate to={info.home} replace />} />
             <Route path="/cio" element={<Verdict />} />
             <Route path="/ops" element={<Ops />} />
             <Route path="/impact" element={<Impact />} />
-            <Route path="/genie" element={<Genie />} />
+            <Route path="/genie" element={<Navigate to="/ask" replace />} />
+            <Route path="/ask" element={<Genie />} />
             <Route path="/meddpicc" element={<Meddpicc />} />
             <Route path="/experiment" element={<Experiment />} />
             <Route path="/repair" element={<Repair />} />
@@ -182,7 +185,7 @@ function Shell({ tenant }: { tenant: Tenant }) {
             <Route path="*" element={<Navigate to={info.home} replace />} />
           </Routes>
         </main>
-        <GenieDock tenant={tenant} />
+        {tenant === 'ops' && <GenieDock tenant={tenant} />}
         <footer className="footer">X-HEC classroom project. Synthetic data on a fictionalized case. Not affiliated with or endorsed by JetBlue.</footer>
       </div>
     </div>

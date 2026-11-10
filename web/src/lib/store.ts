@@ -11,6 +11,9 @@ export const breakEven = (a: Assumptions) => {
 }
 export const REGIONS = ['north', 'south', 'east', 'west'] as const
 
+export interface OpsFilters { query: string; region: 'all' | 'north' | 'south' | 'east' | 'west'; minRisk: number; maxBuffer: number | null; flaggedOnly: boolean; manual: boolean; severe: boolean; shortBuffer: boolean }
+export const OPS_FILTER_DEFAULTS: OpsFilters = { query: '', region: 'all', minRisk: 0.5, maxBuffer: null, flaggedOnly: true, manual: true, severe: false, shortBuffer: false }
+
 export interface GenieReply { conversationId?: string; messageId?: string; text: string; sql?: string | null; columns: string[]; rows: unknown[][]; error?: string }
 export interface GenieTurn { q: string; a?: GenieReply; failed?: string }
 
@@ -34,6 +37,9 @@ interface State {
   setCutoff: (v: number) => void
   capacity: number
   setCapacity: (v: number) => void
+  opsFilters: OpsFilters
+  setOpsFilters: (p: Partial<OpsFilters>) => void
+  resetOpsFilters: () => void
   regions: string[]
   toggleRegion: (r: string) => void
   model: ScoreKey
@@ -78,6 +84,9 @@ export const useApp = create<State>()((set, get) => ({
   setCutoff: (cutoff) => set({ cutoff }),
   capacity: 25,
   setCapacity: (capacity) => set({ capacity }),
+  opsFilters: { ...OPS_FILTER_DEFAULTS },
+  setOpsFilters: (p) => set((s) => ({ opsFilters: { ...s.opsFilters, ...p } })),
+  resetOpsFilters: () => set({ opsFilters: { ...OPS_FILTER_DEFAULTS } }),
   regions: [...REGIONS],
   toggleRegion: (r) => set((s) => {
     const on = s.regions.includes(r)
