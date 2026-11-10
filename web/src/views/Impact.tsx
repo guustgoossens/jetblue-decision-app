@@ -117,18 +117,28 @@ export default function Impact() {
           <div><b className="mono">{usd(weeklyNet * 52)}</b><span>a year (x 52)</span></div>
         </div>
         <div className="im-sens" aria-label="Sensitivity to prevent share">
-          <span className="eyebrow">Value if prevent share is</span>
+          <span className="eyebrow">Weekly net value if interventions prevent</span>
           {[0.1, 0.2, 0.3, 0.5].map((p) => {
             const v = weeklyAt(p)
             return (
-              <button key={p} type="button" className={'im-sens__c' + (Math.abs(a.preventRate - p) < 0.005 ? ' is-on' : '')} onClick={() => setAssumption('preventRate', p)}>
+              <button key={p} type="button" aria-pressed={Math.abs(a.preventRate - p) < 0.005} className={'im-sens__c' + (Math.abs(a.preventRate - p) < 0.005 ? ' is-on' : '')} onClick={() => setAssumption('preventRate', p)}>
                 <small>{pct(p)}</small>
                 <b className="mono">{usd(v)}</b>
               </button>
             )
           })}
         </div>
-        <p className="im-hero__note">Net = delays x recall x prevent share x cost per disruption, minus flags x cost per intervention. Click a share to set it.</p>
+        <div className="im-explainer">
+          <p><strong>What does 10% mean?</strong> Of every 100 real disruptions correctly flagged by the model, we assume early intervention prevents 10. The 20%, 30% and 50% options test stronger intervention effects. These are scenarios to validate in the pilot, not measured success rates or model confidence scores.</p>
+          <details>
+            <summary>How the weekly value is calculated</summary>
+            <p>For the selected model and risk cut-off, recall is {pct1(cm.recall)}: the share of actual disruptions correctly flagged. Applying that rate to {num(biz.delaysPerWeek)} baseline delays per week gives {num(biz.delaysPerWeek * cm.recall, 1)} delays we could act on.</p>
+            <p><strong>At the selected {pct(a.preventRate)} prevention share:</strong> {num(biz.delaysPerWeek)} delays × {pct1(cm.recall)} recall × {pct(a.preventRate)} prevented = {num(avoided, 1)} fewer delays per week. At {usd(a.disruptionCost)} per disruption, that saves {usd(avoided * a.disruptionCost)}.</p>
+            <p>We estimate {num(flagsPerWeek, 1)} interventions per week by scaling the validation data’s ratio of all flags to actual disruptions to the weekly delay baseline. Every flag costs {usd(a.interventionCost)} to act on, including false alarms, for a total of {usd(flagsPerWeek * a.interventionCost)}.</p>
+            <p><strong>Weekly net value = {usd(avoided * a.disruptionCost)} avoided costs − {usd(flagsPerWeek * a.interventionCost)} intervention costs = {usd(weeklyNet)}.</strong> A negative value means intervention costs exceed avoided costs. Figures are rounded for display.</p>
+          </details>
+          <p className="im-hero__note">Each option keeps the model, risk cut-off and costs fixed and changes only the assumed prevention share. Click a percentage to update the scenario above. Estimates extrapolate synthetic validation data; the model predicts risk and does not establish that intervention causes fewer delays.</p>
+        </div>
       </section>
 
       <div className="im-top">
