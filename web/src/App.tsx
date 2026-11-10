@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { useApp } from './lib/store'
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { useApp, type Tenant } from './lib/store'
 import { data } from './lib/data'
 import Verdict from './views/Verdict'
 import Ops from './views/Ops'
@@ -11,6 +11,7 @@ import Meddpicc from './views/Meddpicc'
 import Repair from './views/Repair'
 import Models from './views/Models'
 import Experiment from './views/Experiment'
+import Welcome, { TENANTS } from './views/Welcome'
 
 const ic = (d: ReactNode) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{d}</svg>
@@ -27,38 +28,49 @@ const ICONS = {
   genie: ic(<><path d="M5 5h14v10H9l-4 4z" /><path d="M9 9.5h6M9 12h4" /></>),
 }
 
-const NAV: { heading?: string; items: { to: string; label: string; icon: ReactNode; end?: boolean }[] }[] = [
-  { heading: 'CIO lane', items: [
-    { to: '/', label: 'CIO verdict', icon: ICONS.verdict, end: true },
-    { to: '/impact', label: 'Impact & cut-off', icon: ICONS.cutoff },
-  ] },
-  { heading: 'Ops lane', items: [
-    { to: '/ops', label: 'Ops desk', icon: ICONS.queue },
-  ] },
-  { heading: 'The case', items: [
-    { to: '/diagnosis', label: 'Diagnosis', icon: ICONS.diagnosis },
-    { to: '/meddpicc', label: 'MEDDPICC', icon: ICONS.meddpicc },
-    { to: '/experiment', label: 'Experiment', icon: ICONS.experiment },
-  ] },
-  { heading: 'Data team', items: [
-    { to: '/repair', label: 'Signal repair', icon: ICONS.repair },
+type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean }
+const NAV_BY_TENANT: Record<Tenant, NavItem[]> = {
+  ops: [{ to: '/ops', label: 'Ops desk', icon: ICONS.queue }],
+  cio: [
+    { to: '/cio', label: 'Summary', icon: ICONS.verdict },
+    { to: '/impact', label: 'Impact', icon: ICONS.cutoff },
+  ],
+  data: [
+    { to: '/repair', label: 'Feed health', icon: ICONS.repair },
     { to: '/models', label: 'Model evidence', icon: ICONS.models },
     { to: '/genie', label: 'Ask Genie', icon: ICONS.genie },
-  ] },
+  ],
+}
+const PILOT_FILE: NavItem[] = [
+  { to: '/diagnosis', label: 'Diagnosis', icon: ICONS.diagnosis },
+  { to: '/meddpicc', label: 'MEDDPICC', icon: ICONS.meddpicc },
+  { to: '/experiment', label: 'Experiment', icon: ICONS.experiment },
 ]
 const PAGE_NAMES: Record<string, string> = {
-  '/': 'CIO verdict', '/ops': 'Ops desk', '/impact': 'Impact & cut-off', '/diagnosis': 'Diagnosis',
-  '/meddpicc': 'MEDDPICC', '/experiment': 'Experiment', '/repair': 'Signal repair', '/models': 'Model evidence', '/genie': 'Ask Genie',
+  '/cio': 'Summary', '/ops': 'Ops desk', '/impact': 'Impact', '/diagnosis': 'Diagnosis',
+  '/meddpicc': 'MEDDPICC', '/experiment': 'Experiment', '/repair': 'Feed health', '/models': 'Model evidence', '/genie': 'Ask Genie',
 }
 
 export default function App() {
+  const tenant = useApp((s) => s.tenant)
+  if (!tenant) return <Welcome />
+  return <Shell tenant={tenant} />
+}
+
+function Shell({ tenant }: { tenant: Tenant }) {
   const { pathname } = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [pilotOpen, setPilotOpen] = useState(false)
+  const [tenantOpen, setTenantOpen] = useState(false)
+  const setTenant = useApp((s) => s.setTenant)
+  const navigate = useNavigate()
+  const info = TENANTS.find((t) => t.id === tenant)!
+  const pilotActive = PILOT_FILE.some((i) => i.to === pathname)
   const server = useApp((s) => s.server)
   const setServer = useApp((s) => s.setServer)
 
-  useEffect(() => { window.scrollTo(0, 0); setMenuOpen(false) }, [pathname])
+  useEffect(() => { window.scrollTo(0, 0); setMenuOpen(false); setTenantOpen(false) }, [pathname])
   useEffect(() => {
     let live = true
     fetch('/api/health')
@@ -77,23 +89,33 @@ export default function App() {
       <aside className="side">
         <div className="side__brand">
           <span className="side__mark" aria-hidden><i /></span>
-          <span className="side__name">Decision Lab</span>
+          <span className="side__name">Disruption Desk</span>
         </div>
         <nav className="side__nav">
-          {NAV.map((g, gi) => (
-            <div className="side__group" key={gi}>
-              {g.heading && <div className="side__heading">{g.heading}</div>}
-              {g.items.map((it) => (
-                <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `side__link ${isActive ? 'is-active' : ''}`}>
-                  {it.icon}
-                  <span className="side__label">{it.label}</span>
-                </NavLink>
-              ))}
-            </div>
-          ))}
+          <div className="side__group">
+            <div className="side__heading">{info.name}</div>
+            {NAV_BY_TENANT[tenant].map((it) => (
+              <NavLink key={it.to} to={it.to} end={it.end} title={it.label} className={({ isActive }) => `side__link ${isActive ? 'is-active' : ''}`}>
+                {it.icon}
+                <span className="side__label">{it.label}</span>
+              </NavLink>
+            ))}
+          </div>
+          <div className="side__group">
+            <button type="button" className="side__heading side__heading--btn" aria-expanded={pilotOpen || pilotActive} onClick={() => setPilotOpen((o) => !o)}>
+              <span>Pilot file</span>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={pilotOpen || pilotActive ? 'is-open' : ''}><path d="m3 2 3 3-3 3" /></svg>
+            </button>
+            {(pilotOpen || pilotActive) && PILOT_FILE.map((it) => (
+              <NavLink key={it.to} to={it.to} title={it.label} className={({ isActive }) => `side__link ${isActive ? 'is-active' : ''}`}>
+                {it.icon}
+                <span className="side__label">{it.label}</span>
+              </NavLink>
+            ))}
+          </div>
         </nav>
         <div className="side__foot">
-          <span className="side__team">Databricked · Team 12</span>
+          <span className="side__team">Team 12 · X-HEC lab</span>
           <button type="button" className="side__toggle" onClick={() => setCollapsed((c) => !c)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand' : 'Collapse'}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M9.5 4.5v15" />
@@ -106,15 +128,36 @@ export default function App() {
           <button type="button" className="menu-btn" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
-          <div className="crumb"><span>JetBlue Disruption Lab</span><span className="crumb__sep">/</span><strong>{PAGE_NAMES[pathname] ?? ''}</strong></div>
+          <div className="crumb"><span>{info.name}</span><span className="crumb__sep">/</span><strong>{PAGE_NAMES[pathname] ?? ''}</strong></div>
           <div className="topbar__right">
+            <div className="tenant">
+              <button type="button" className="tenant__btn" aria-haspopup="menu" aria-expanded={tenantOpen} onClick={() => setTenantOpen((o) => !o)}>
+                <span className="tenant__dot" aria-hidden />{info.name}
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m2 3.5 3 3 3-3" /></svg>
+              </button>
+              {tenantOpen && (
+                <>
+                  <div className="tenant__scrim" onClick={() => setTenantOpen(false)} aria-hidden />
+                  <div className="tenant__menu" role="menu">
+                    {TENANTS.map((t) => (
+                      <button key={t.id} type="button" role="menuitemradio" aria-checked={t.id === tenant} className={`tenant__item ${t.id === tenant ? 'is-on' : ''}`}
+                        onClick={() => { setTenant(t.id); setTenantOpen(false); navigate(t.home) }}>
+                        {t.name}<small>{t.role}</small>
+                      </button>
+                    ))}
+                    <button type="button" role="menuitem" className="tenant__item tenant__item--out" onClick={() => { setTenant(null); navigate('/') }}>Sign out</button>
+                  </div>
+                </>
+              )}
+            </div>
             <span className="topbar__meta">Validation · {validationN} flight-hours</span>
             <span className={`status status--${server}`}><i />{statusText}</span>
           </div>
         </header>
         <main className="content">
           <Routes>
-            <Route path="/" element={<Verdict />} />
+            <Route path="/" element={<Navigate to={info.home} replace />} />
+            <Route path="/cio" element={<Verdict />} />
             <Route path="/ops" element={<Ops />} />
             <Route path="/impact" element={<Impact />} />
             <Route path="/genie" element={<Genie />} />
@@ -123,7 +166,7 @@ export default function App() {
             <Route path="/experiment" element={<Experiment />} />
             <Route path="/repair" element={<Repair />} />
             <Route path="/models" element={<Models />} />
-            <Route path="*" element={<Verdict />} />
+            <Route path="*" element={<Navigate to={info.home} replace />} />
           </Routes>
         </main>
         <footer className="footer">X-HEC classroom project. Synthetic data on a fictionalized case. Not affiliated with or endorsed by JetBlue.</footer>

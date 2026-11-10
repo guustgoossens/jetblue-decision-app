@@ -4,7 +4,7 @@ import { predict, baseline, contributions } from '../lib/scoring'
 import { useApp, REGIONS } from '../lib/store'
 import { pct, pct1, num, signed, prettyTs } from '../lib/format'
 import type { Features, FeatureKey } from '../lib/types'
-import { Page, Card, Pill, Slider, Note, Bar, Stat } from '../components/ui'
+import { Card, Pill, Slider, Note, Bar, Stat } from '../components/ui'
 import '../styles/ops.css'
 
 const KEYS: FeatureKey[] = ['x1', 'x2', 'x3']
@@ -57,6 +57,10 @@ export default function Ops() {
   const toggleRegion = useApp((s) => s.toggleRegion)
   const selectedId = useApp((s) => s.selectedId)
   const setSelectedId = useApp((s) => s.setSelectedId)
+  const [open, setOpen] = useState(false)
+  const [acked, setAcked] = useState<Set<string>>(new Set())
+  const toggleAck = (id: string) => setAcked((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const pick = (id: string) => { setSelectedId(id); setOpen(true) }
 
   const rows: QRow[] = useMemo(
     () =>
@@ -106,117 +110,147 @@ export default function Ops() {
     const inRegion = inWin.filter((r) => regions.includes(r.segment))
     const flagged = inRegion.filter((r) => r.p >= cutoff)
     const actions = flagged.slice(0, capacity)
-    const actionIds = new Set(actions.map((r) => r.id))
     const byRegion = REGIONS.map((g) => {
       const all = inWin.filter((r) => r.segment === g)
       const fl = all.filter((r) => r.p >= cutoff)
       const act = actions.filter((r) => r.segment === g)
       return { g, total: all.length, flagged: fl.length, acted: act.length, avg: all.length ? all.reduce((s, r) => s + r.p, 0) / all.length : 0 }
     })
-    return { inRegion, flagged, actions, actionIds, byRegion }
+    return { inRegion, flagged, actions, byRegion }
   }, [rows, regions, cutoff, capacity, now, winMin])
 
   useEffect(() => {
-    if (selectedId == null && rows.length) setSelectedId(rows[0].id)
-  }, [selectedId, rows, setSelectedId])
+    if (!open) return
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [open])
 
   const selected = rows.find((r) => r.id === selectedId) ?? rows[0]
   const overflow = Math.max(0, view.flagged.length - view.actions.length)
-
-  const random = () => {
-    if (!view.actions.length) return
-    setSelectedId(view.actions[Math.floor(Math.random() * view.actions.length)].id)
-  }
+  const ackN = view.actions.filter((r) => acked.has(r.id)).length
 
   const exportCsv = () => {
-    const lines = ['rank,flight_hour_id,region,observed_at,queue_depth,weather_severity,turnaround_buffer_min,risk,suggested_action_heuristic,owner']
+    const lines = ['rank,flight_hour_id,region,observed_at,queue_depth,weather_severity,turnaround_buffer_min,risk,suggested_action_heuristic,owner,acknowledged']
     view.actions.forEach((r, i) => {
       const s = suggest(r)
-      lines.push([i + 1, r.id, r.segment, r.observedAt, r.x1, r.x2, r.x3, r.p.toFixed(4), `"${s.action}"`, `"${s.owner.replace('Owner: ', '')}"`].join(','))
+      lines.push([i + 1, r.id, r.segment, r.observedAt, r.x1, r.x2, r.x3, r.p.toFixed(4), `"${s.action}"`, `"${s.owner.replace('Owner: ', '')}"`, acked.has(r.id) ? 'yes' : 'no'].join(','))
     })
     download('next-hour-action-list.csv', lines.join('\n') + '\n')
   }
 
   return (
-    <Page
-      eyebrow="Action"
-      title="Where should we act in the next hour?"
-      lede="These are upcoming flight-hours the models never saw. Their outcome is unknown, so every risk below is a prediction, not a result. The desk acts on the top of the list, up to its capacity."
-    >
-      <div className="q-layout">
-        <div className="q-left">
-          <Card eyebrow="Decision clock" title={`Now ${hhmm(now)}, looking ${winMin} min ahead`}>
-            <div className="ops-clock">
-              <button className="btn btn--primary" onClick={togglePlay}>{playing ? 'Pause' : 'Auto-play'}</button>
-              <input
-                type="range" className="ops-range" aria-label="Current time"
-                min={0} max={Math.round((span.t1 - span.t0) / MIN)} step={1}
-                value={Math.round((now - span.t0) / MIN)}
-                onChange={(e) => { setPlaying(false); setNow(span.t0 + Number(e.target.value) * MIN) }}
-              />
-              <span className="mono ops-clock__t">{hhmm(now)}</span>
-            </div>
+    <div className="page ops-page">
+      <div className="ops-bar">
+        <div className="ops-bar__row">
+          <h1 className="ops-title">Next {winMin} minutes</h1>
+          <div className="ops-clock">
+            <button className="btn btn--primary" onClick={togglePlay}>{playing ? 'Pause' : 'Auto-play'}</button>
+            <input
+              type="range" className="ops-range" aria-label="Current time"
+              min={0} max={Math.round((span.t1 - span.t0) / MIN)} step={1}
+              value={Math.round((now - span.t0) / MIN)}
+              onChange={(e) => { setPlaying(false); setNow(span.t0 + Number(e.target.value) * MIN) }}
+            />
+            <span className="mono ops-clock__t">Now {hhmm(now)}</span>
+          </div>
+          <div className="q-chips ops-chips">
+            {REGIONS.map((g) => (
+              <button key={g} className={'q-chip' + (regions.includes(g) ? ' is-on' : '')} aria-pressed={regions.includes(g)} onClick={() => toggleRegion(g)}>
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="ops-bar__row ops-bar__row--ctl">
+          <div className="ops-ctl"><Slider label="Capacity / hour" value={capacity} min={5} max={80} step={1} onChange={setCapacity} format={(v) => num(v)} /></div>
+          <div className="ops-ctl"><Slider label="Risk cut-off" value={cutoff} min={0.05} max={0.95} step={0.01} onChange={setCutoff} format={pct} /></div>
+          <div className="ops-tlwrap">
             <Timeline rows={rows} issues={issues} span={span} now={now} winMs={winMin * MIN} onSet={(t) => { setPlaying(false); setNow(t) }} />
-            <p className="q-count mono">Blind window {hhmm(span.t0)} to {hhmm(span.t1)}. The desk sees only what is due in the next {winMin} minutes. Risks are predictions.</p>
-          </Card>
+          </div>
+        </div>
+      </div>
 
-          <Card eyebrow="Desk settings" title="Capacity, regions and cut-off">
-            <div className="ops-set">
-              <Slider label="Interventions the desk can handle this hour" value={capacity} min={5} max={80} step={1} onChange={setCapacity} format={(v) => num(v)} />
-              <Slider label="Risk cut-off" value={cutoff} min={0.05} max={0.95} step={0.01} onChange={setCutoff} format={pct} />
-            </div>
-            <div className="q-chips">
-              {REGIONS.map((g) => (
-                <button key={g} className={'q-chip' + (regions.includes(g) ? ' is-on' : '')} aria-pressed={regions.includes(g)} onClick={() => toggleRegion(g)}>
-                  {g}
-                </button>
-              ))}
-            </div>
-            <div className="ops-stats">
-              <Stat label="Flagged in window" value={num(view.flagged.length)} sub={`of ${num(view.inRegion.length)} due in the next ${winMin} min`} />
-              <Stat label="Action list" value={num(view.actions.length)} sub={`capacity ${num(capacity)}`} tone="coral" />
-              <Stat label="Flagged, over capacity" value={num(overflow)} sub={overflow ? 'monitor, cannot act' : 'none'} />
-            </div>
-          </Card>
+      <div className="ops-kpis">
+        <Stat label="Due in window" value={num(view.inRegion.length)} sub={`next ${winMin} min`} />
+        <Stat label="Flagged" value={num(view.flagged.length)} sub={`cut-off ${pct(cutoff)}`} />
+        <Stat label="Action list" value={num(view.actions.length)} sub={`capacity ${num(capacity)}`} tone="coral" />
+        <Stat label="Over capacity" value={num(overflow)} sub={overflow ? 'monitor only' : 'none'} />
+        <Stat label="Acknowledged" value={`${ackN} / ${view.actions.length}`} sub="this shift" />
+        <Stat label="No model score" value={num(winIssues.length)} sub="manual check" />
+      </div>
 
-          <Card eyebrow="All 342 upcoming flight-hours" title="Sorted by risk, current window lit">
-            <div className="ops-grid" role="list" aria-label="Flight-hours sorted by risk">
-              {rows.map((r) => {
-                const inView = regions.includes(r.segment)
-                const tt = tms(r.observedAt)
-                const inWin = tt >= now && tt <= now + winMin * MIN
-                const cls = !inView || !inWin ? 'is-off' : view.actionIds.has(r.id) ? 'is-act' : r.p >= cutoff ? 'is-over' : 'is-mon'
-                return (
-                  <span key={r.id} style={{ display: 'contents' }}>
-                    <button role="listitem" className={'ops-dot ' + cls + (r.id === selected?.id ? ' is-sel' : '')} title={`${r.id}: ${pct1(r.p)}`} aria-label={`${r.id} risk ${pct1(r.p)}`} onClick={() => setSelectedId(r.id)} />
-                  </span>
-                )
-              })}
+      <div className="ops-main">
+        <Card
+          eyebrow="Prediction"
+          title="Action list"
+          right={
+            <div className="q-actions">
+              <span className="ops-tag">Heuristic actions</span>
+              <button className="btn btn--primary" onClick={exportCsv}>Export CSV</button>
             </div>
-            <ul className="q-legend">
-              <li><i className="q-dot" style={{ background: 'var(--coral)' }} />Action list</li>
-              <li><i className="q-dot" style={{ background: 'var(--navy)' }} />Flagged, over capacity</li>
-              <li><i className="q-dot" style={{ background: 'var(--line)' }} />Monitor</li>
-              <li><i className="q-dot" style={{ background: 'var(--line-soft)', border: '1px solid var(--line)' }} />Outside window or region</li>
-            </ul>
-          </Card>
+          }
+          flush
+        >
+          <div className="q-scroll ops-scroll">
+            <table className="tbl q-tbl ops-tbl">
+              <thead>
+                <tr>
+                  <th>Due</th>
+                  <th>Flight-hour</th>
+                  <th>Region</th>
+                  <th>Risk</th>
+                  <th className="q-num">Queue</th>
+                  <th>Weather</th>
+                  <th className="q-num">Buffer</th>
+                  <th>Suggested action</th>
+                  <th>Owner</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {view.actions.map((r) => {
+                  const s = suggest(r)
+                  const done = acked.has(r.id)
+                  return (
+                    <tr key={r.id} className={'is-click' + (r.id === selected?.id && open ? ' is-on' : '') + (done ? ' is-ack' : '')} onClick={() => pick(r.id)}>
+                      <td className="mono">in {Math.max(0, Math.round((tms(r.observedAt) - now) / MIN))} min</td>
+                      <td className="mono">{r.id}</td>
+                      <td className="ops-cap-n">{r.segment}</td>
+                      <td>
+                        <div className="q-prob">
+                          <span className="mono">{pct1(r.p)}</span>
+                          <Bar value={r.p} max={1} color="var(--coral)" height={4} />
+                        </div>
+                      </td>
+                      <td className="q-num mono">{num(r.x1, 0)}</td>
+                      <td>{r.x2 >= 0.7 ? <Pill tone="coral">Severe {num(r.x2, 2)}</Pill> : <span className="mono">{num(r.x2, 2)}</span>}</td>
+                      <td className="q-num mono">{num(r.x3, 0)} min</td>
+                      <td><Pill tone="navy">{s.action}</Pill></td>
+                      <td className="ops-owner">{s.owner.replace('Owner: ', '')}</td>
+                      <td>
+                        <button
+                          className={'btn ops-ack' + (done ? ' is-on' : '')}
+                          aria-pressed={done}
+                          onClick={(e) => { e.stopPropagation(); toggleAck(r.id) }}
+                        >
+                          {done ? 'Acknowledged' : 'Acknowledge'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {!view.actions.length && (
+                  <tr><td colSpan={10} className="q-empty">No flight-hour above the cut-off due in this window.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
-          <Card eyebrow="Load by region" title="Where the flagged flight-hours sit">
-            <div className="ops-load">
-              {view.byRegion.map((b) => (
-                <div key={b.g} className={'ops-load__row' + (regions.includes(b.g) ? '' : ' is-off')}>
-                  <span className="ops-load__name">{b.g}</span>
-                  <Bar value={b.flagged} max={Math.max(1, ...view.byRegion.map((x) => x.flagged))} color="var(--navy)" height={8} />
-                  <span className="mono ops-load__n">{b.flagged} flagged</span>
-                  <span className="mono ops-load__n">{regions.includes(b.g) ? b.acted : 0} on list</span>
-                  <span className="mono ops-load__n">avg {pct(b.avg)}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card eyebrow="Issues" title="No model score: act on manual check">
-            <p className="q-count mono">{winIssues.length} in this window, {issues.length} across the blind set. These flight-hours had no trustworthy signal, so the model cannot rank them.</p>
+        <div className="ops-side">
+          <Card eyebrow="No model score" title="Issues · manual check">
+            <p className="q-count mono">{winIssues.length} in window, {issues.length} in blind set</p>
             {winIssues.length ? (
               <ul className="ops-issues">
                 {winIssues.map((i) => (
@@ -232,65 +266,35 @@ export default function Ops() {
             )}
           </Card>
 
-          <Card
-            eyebrow="Intervention queue"
-            title={`Next ${winMin} min: top ${view.actions.length} by risk`}
-            right={
-              <div className="q-actions">
-                <button className="btn" onClick={random}>Random</button>
-                <button className="btn btn--primary" onClick={exportCsv}>Export action list</button>
-              </div>
-            }
-          >
-            <p className="q-count mono">
-              {view.actions.length} on the list, {overflow} flagged beyond capacity. Suggested actions are a desk rule of thumb, not model output.
-            </p>
-            <div className="q-scroll ops-scroll">
-              <table className="tbl q-tbl">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Flight-hour</th>
-                    <th>Due</th>
-                    <th className="q-num">Queue</th>
-                    <th className="q-num">Weather</th>
-                    <th className="q-num">Buffer</th>
-                    <th>Risk</th>
-                    <th>Suggested action (heuristic)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {view.actions.map((r, i) => {
-                    const s = suggest(r)
-                    return (
-                      <tr key={r.id} className={'is-click' + (r.id === selected?.id ? ' is-on' : '')} onClick={() => setSelectedId(r.id)}>
-                        <td className="mono">{i + 1}</td>
-                        <td className="mono">{r.id}</td>
-                        <td className="mono">in {Math.max(0, Math.round((tms(r.observedAt) - now) / MIN))} min<div className="ops-owner">{hhmm(tms(r.observedAt))}</div></td>
-                        <td className="q-num mono">{num(r.x1, 0)}</td>
-                        <td className="q-num mono">{num(r.x2, 2)}</td>
-                        <td className="q-num mono">{num(r.x3, 0)}</td>
-                        <td>
-                          <div className="q-prob">
-                            <span className="mono">{pct1(r.p)}</span>
-                            <Bar value={r.p} max={1} color="var(--coral)" height={4} />
-                          </div>
-                        </td>
-                        <td><b>{s.action}</b><div className="ops-owner">{s.owner}</div></td>
-                      </tr>
-                    )
-                  })}
-                  {!view.actions.length && (
-                    <tr><td colSpan={8} className="q-empty">No flight-hour above the cut-off due in this window.</td></tr>
-                  )}
-                </tbody>
-              </table>
+          <Card eyebrow="Region load" title="Flagged by region">
+            <div className="ops-load">
+              {view.byRegion.map((b) => (
+                <div key={b.g} className={'ops-load__row' + (regions.includes(b.g) ? '' : ' is-off')}>
+                  <span className="ops-load__name">{b.g}</span>
+                  <Bar value={b.flagged} max={Math.max(1, ...view.byRegion.map((x) => x.flagged))} color="var(--navy)" height={8} />
+                  <span className="mono ops-load__n">{b.flagged} flagged</span>
+                  <span className="mono ops-load__n">{regions.includes(b.g) ? b.acted : 0} listed</span>
+                  <span className="mono ops-load__n">avg {pct(b.avg)}</span>
+                </div>
+              ))}
             </div>
           </Card>
         </div>
-        <div className="q-right">{selected && <Detail key={selected.id} row={selected} cutoff={cutoff} />}</div>
       </div>
-    </Page>
+
+      {open && selected && (
+        <>
+          <div className="ops-scrim" onClick={() => setOpen(false)} />
+          <aside className="ops-drawer" aria-label="Flight-hour detail">
+            <div className="ops-drawer__bar">
+              <span className="ops-tag">Prediction</span>
+              <button className="btn" onClick={() => setOpen(false)}>Close</button>
+            </div>
+            <Detail key={selected.id} row={selected} cutoff={cutoff} />
+          </aside>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -356,7 +360,7 @@ function Detail({ row, cutoff }: { row: QRow; cutoff: number }) {
           <div><dt>Region</dt><dd>{row.segment}</dd></div><div><dt>Observed</dt><dd className="mono">{prettyTs(row.observedAt)}</dd></div>
           <div><dt>Outcome</dt><dd>Unknown (blind flight-hour)</dd></div>
         </dl>
-        <p className="ops-act"><b>{suggest(x).action}</b><span>{suggest(x).owner}. Rule-of-thumb heuristic, not the model.</span></p>
+        <p className="ops-act"><b>{suggest(x).action}</b><span>{suggest(x).owner} · Heuristic</span></p>
         <div className="q-big">
           <span className="q-bigp mono">{pct1(p)}</span>
           <Pill tone={contact ? 'coral' : 'neutral'}>{contact ? 'Flag' : 'Monitor'}</Pill>
@@ -419,14 +423,12 @@ function Detail({ row, cutoff }: { row: QRow; cutoff: number }) {
             <span className="q-wf__pp mono">{num(p * 100, 1)}%</span>
           </div>
         </div>
-        <Note>
-          Exact attribution on log-odds, rescaled to risk points (pp). Lower turnaround buffer raises risk.
-        </Note>
+        <Note>Log-odds attribution in risk points (pp).</Note>
       </Card>
 
       <Card
-        eyebrow="What-if"
-        title="Change the conditions, re-score instantly"
+        eyebrow="Scenario"
+        title="What-if"
         right={
           <button className="btn" disabled={!changed} onClick={() => setX(orig)}>
             Reset
@@ -475,7 +477,7 @@ function Detail({ row, cutoff }: { row: QRow; cutoff: number }) {
             "Scoring in the browser with the champion's exact coefficients"
           )}
         </p>
-        <Note>What-if scores are predicted risk, not causal effects: they do not show that acting prevents a disruption.</Note>
+        <Note>Predicted risk, not a causal effect.</Note>
       </Card>
     </div>
   )

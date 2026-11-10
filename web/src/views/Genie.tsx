@@ -50,12 +50,11 @@ export default function Genie() {
 
   return (
     <Page
-      eyebrow="Data team lane · Genie"
-      title="Ask the repaired data"
-      lede="The data team works in Databricks and Genie directly, not in a dashboard. Ask a question in plain words and Genie answers from the curated tables, with the SQL it ran."
+      eyebrow="Data team · Genie"
+      title="Ask Genie"
     >
       <div className="gn-layout">
-        <Card eyebrow="Conversation" title={conv ? 'Follow-ups keep the context' : 'Start with a question'}
+        <Card eyebrow="Conversation" title={conv ? 'Conversation' : 'New question'}
           right={turns.length > 0 && <button className="btn" onClick={() => { setTurns([]); setConv(undefined) }}>New conversation</button>}>
           {turns.length === 0 && (
             <div className="gn-chips">
@@ -109,14 +108,13 @@ export default function Genie() {
         </Card>
 
         <div className="gn-side">
-          <Card eyebrow="Curated tables" title={data.meta.schema}>
+          <Card eyebrow="Tables" title={data.meta.schema}>
             <ul className="gn-tables">
               {TABLES.map((t) => <li key={t} className="mono">{t}</li>)}
             </ul>
-            <Note>Genie reads these tables only. Blind rows are scored, with outcomes unknown.</Note>
+            <Note>Genie reads these tables only. Blind outcomes are unknown.</Note>
           </Card>
-          <Card eyebrow="Without the app" title="Use Genie directly">
-            <p className="gn-p">Same space, same tables, in the Databricks workspace.</p>
+          <Card eyebrow="Databricks" title="Open Genie space">
             <a className="btn" href={GENIE_URL} target="_blank" rel="noreferrer">Open in Databricks Genie</a>
           </Card>
         </div>

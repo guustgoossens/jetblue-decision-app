@@ -44,7 +44,7 @@
 .rp-fr__body b{color:var(--ink);font-weight:600}
 .rp-genie{white-space:pre-wrap;font-size:13px;line-height:1.55}
 .rp-defects{display:grid;gap:0}
-.rp-dh,.rp-d{display:grid;grid-template-columns:minmax(130px,190px) 1fr 1fr 90px;gap:14px;align-items:start;padding:11px 4px;font-size:13px}
+.rp-dh,.rp-d{display:grid;grid-template-columns:minmax(130px,190px) 150px 1fr 110px;gap:14px;align-items:start;padding:11px 4px;font-size:13px}
 .rp-dh{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:8px}
 .rp-d{border-bottom:1px solid var(--line-soft);transition:background .15s}
 .rp-d:hover{background:var(--tint)}

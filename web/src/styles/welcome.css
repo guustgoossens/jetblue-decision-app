@@ -1,0 +1,24 @@
+.welcome { min-height: 100vh; display: flex; flex-direction: column; background: var(--paper); }
+.welcome__inner { flex: 1; width: 100%; max-width: 920px; margin: 0 auto; padding: 56px 24px 24px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.welcome__brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -.01em; }
+.welcome__title { font-size: clamp(30px, 5vw, 48px); line-height: 1.08; letter-spacing: -.035em; font-weight: 500; }
+.welcome__cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 6px; }
+.wcard { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; min-height: 190px; padding: 22px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); transition: border-color .15s, box-shadow .15s, transform .15s; }
+.wcard:hover, .wcard.is-sel { border-color: var(--navy); box-shadow: 0 6px 22px rgba(23,52,61,.1); }
+.wcard:active { transform: translateY(1px); }
+.wcard__key { position: absolute; top: 16px; right: 16px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; color: var(--muted); }
+.wcard.is-sel .wcard__key { background: var(--navy); border-color: var(--navy); color: #fff; }
+.wcard__role { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.wcard__name { font-size: 26px; font-weight: 500; letter-spacing: -.025em; margin-top: 4px; }
+.wcard__blurb { font-size: 14.5px; color: var(--muted); margin-top: auto; }
+.welcome__hint { font-size: 12.5px; color: var(--faint); }
+.welcome__pilot { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.welcome__link { border: 0; background: none; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.welcome__link:hover { color: var(--ink); }
+.welcome__dot { color: var(--faint); }
+.welcome__foot { padding: 16px 24px 24px; font-size: 11.5px; color: var(--faint); text-align: center; }
+@media (max-width: 760px) {
+  .welcome__cards { grid-template-columns: 1fr; }
+  .wcard { min-height: 0; }
+  .wcard__blurb { margin-top: 4px; }
+}

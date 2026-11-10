@@ -11,7 +11,15 @@ export const breakEven = (a: Assumptions) => {
 }
 export const REGIONS = ['north', 'south', 'east', 'west'] as const
 
+export type Tenant = 'ops' | 'cio' | 'data'
+export const TENANT_KEY = 'jb-tenant'
+const readTenant = (): Tenant | null => {
+  try { const v = sessionStorage.getItem(TENANT_KEY); return v === 'ops' || v === 'cio' || v === 'data' ? v : null } catch { return null }
+}
+
 interface State {
+  tenant: Tenant | null
+  setTenant: (t: Tenant | null) => void
   cutoff: number
   setCutoff: (v: number) => void
   capacity: number
@@ -29,6 +37,11 @@ interface State {
 }
 
 export const useApp = create<State>()((set) => ({
+  tenant: readTenant(),
+  setTenant: (tenant) => {
+    try { if (tenant) sessionStorage.setItem(TENANT_KEY, tenant); else sessionStorage.removeItem(TENANT_KEY) } catch { /* ignore */ }
+    set({ tenant })
+  },
   cutoff: 0.5,
   setCutoff: (cutoff) => set({ cutoff }),
   capacity: 25,

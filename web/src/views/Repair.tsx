@@ -37,7 +37,7 @@ function Funnel() {
   return (
     <Card
       eyebrow="Funnel"
-      title="From 2,000 expected flight-hours to the ones we can trust"
+      title="Expected to eligible"
       right={<Seg options={SPLITS} value={split} onChange={setSplit} />}
     >
       <div className="rp-funnel">
@@ -71,34 +71,31 @@ function Funnel() {
 function Defects() {
   const n = data.naive
   const u = n.unitRows
-  const rows: { name: string; naive: string; fix: string; n: number | string; unit: string }[] = [
-    { name: 'Station keys', naive: `${n.keyVariants} spellings of the same key. A join on raw keys loses ${num(n.lostOnRawJoin, 0)} of ${num(data.funnel.expected, 0)} expected records.`, fix: 'Lower-case, trim and drop the -legacy suffix. All 2,000 keys resolve.', n: n.lostOnRawJoin, unit: 'lost on raw keys' },
-    { name: 'Late revisions', naive: `"Latest revision" picks a row that lands about ${num(n.lateMedianHours, 0)} h after the decision time, so it uses information ops did not have.`, fix: 'Keep rows available at or before the decision time, then rank revisions.', n: n.lateRows, unit: 'revisions after the decision' },
-    { name: 'Replays', naive: 'Replayed rows have a different available_at, so a plain dropDuplicates keeps them.', fix: 'One row per flight-hour: highest revision, then latest available, initial before replay.', n: n.replayRows, unit: 'replay rows' },
-    { name: 'Weather units', naive: `Weather severity arrives in three units: ${num(u.percent ?? 0, 0)} percent and ${num(u.basis_points ?? 0, 0)} basis points rows; ${num(n.commaRows, 0)} rows use a comma decimal. Casting leaves values up to 100.`, fix: 'Comma to dot, percent / 100, basis points / 10,000. Every x2 ends in 0 to 1.', n: (u.percent ?? 0) + (u.basis_points ?? 0) + n.commaRows, unit: 'rows converted' },
-    { name: 'Sentinels and nulls', naive: `${num(n.sentinelRows, 0)} buffers equal -999 and ${num(n.nullX1Rows, 0)} queue depths are null. Dropping loses them; keeping treats -999 as a real buffer.`, fix: 'Recover the latest timely value from the recovery log. Quarantine if none.', n: n.sentinelRows + n.nullX1Rows, unit: 'placeholder rows' },
-    { name: 'Unparseable values', naive: `${num(n.unparseableRows, 0)} queue depths read "unparseable". No repair is permitted.`, fix: 'Quarantine as x1_unparseable. The record stays in the 2,000 denominator.', n: n.unparseableRows, unit: 'rows' },
-    { name: 'Purpose policy', naive: `${num(n.policyRows, 0)} policy rows, including ${num(n.marketingRows, 0)} marketing rows that are not authorisation for model training.`, fix: 'The latest model_training policy in force at the decision time decides. Marketing rows are ignored.', n: data.funnel.reasons.find((r) => r.key === 'policy_not_allowed')?.count ?? 0, unit: 'not permitted' },
-    { name: 'Outcome leakage', naive: `resolved_outcome_hint equals the label on ${n.leakageAgreement} labelled rows.`, fix: 'Never used as a feature. It appears only as a leakage test.', n: n.leakageAgreement, unit: 'agreement' },
-    { name: 'Coverage', naive: 'Some flight-hours have no observation available by the decision time.', fix: 'Quarantine as no timely observation.', n: data.funnel.reasons.find((r) => r.key === 'no_observation_at_decision_time')?.count ?? 0, unit: 'no timely row' },
+  const rows: { name: string; naive: string; fix: string; n: number | string; unit: string; status?: 'Pass' | 'Quarantined' | 'Recovered' }[] = [
+    { name: 'Station keys', status: 'Recovered', naive: `${n.keyVariants} spellings of the same key. A join on raw keys loses ${num(n.lostOnRawJoin, 0)} of ${num(data.funnel.expected, 0)} expected records.`, fix: 'Lower-case, trim and drop the -legacy suffix. All 2,000 keys resolve.', n: n.lostOnRawJoin, unit: 'lost on raw keys' },
+    { name: 'Late revisions', status: 'Recovered', naive: `"Latest revision" picks a row that lands about ${num(n.lateMedianHours, 0)} h after the decision time, so it uses information ops did not have.`, fix: 'Keep rows available at or before the decision time, then rank revisions.', n: n.lateRows, unit: 'revisions after the decision' },
+    { name: 'Replays', status: 'Recovered', naive: 'Replayed rows have a different available_at, so a plain dropDuplicates keeps them.', fix: 'One row per flight-hour: highest revision, then latest available, initial before replay.', n: n.replayRows, unit: 'replay rows' },
+    { name: 'Weather units', status: 'Recovered', naive: `Weather severity arrives in three units: ${num(u.percent ?? 0, 0)} percent and ${num(u.basis_points ?? 0, 0)} basis points rows; ${num(n.commaRows, 0)} rows use a comma decimal. Casting leaves values up to 100.`, fix: 'Comma to dot, percent / 100, basis points / 10,000. Every x2 ends in 0 to 1.', n: (u.percent ?? 0) + (u.basis_points ?? 0) + n.commaRows, unit: 'rows converted' },
+    { name: 'Sentinels and nulls', status: 'Recovered', naive: `${num(n.sentinelRows, 0)} buffers equal -999 and ${num(n.nullX1Rows, 0)} queue depths are null. Dropping loses them; keeping treats -999 as a real buffer.`, fix: 'Recover the latest timely value from the recovery log. Quarantine if none.', n: n.sentinelRows + n.nullX1Rows, unit: 'placeholder rows' },
+    { name: 'Unparseable values', status: 'Quarantined', naive: `${num(n.unparseableRows, 0)} queue depths read "unparseable". No repair is permitted.`, fix: 'Quarantine as x1_unparseable. The record stays in the 2,000 denominator.', n: n.unparseableRows, unit: 'rows' },
+    { name: 'Purpose policy', status: 'Quarantined', naive: `${num(n.policyRows, 0)} policy rows, including ${num(n.marketingRows, 0)} marketing rows that are not authorisation for model training.`, fix: 'The latest model_training policy in force at the decision time decides. Marketing rows are ignored.', n: data.funnel.reasons.find((r) => r.key === 'policy_not_allowed')?.count ?? 0, unit: 'not permitted' },
+    { name: 'Outcome leakage', status: 'Pass', naive: `resolved_outcome_hint equals the label on ${n.leakageAgreement} labelled rows.`, fix: 'Never used as a feature. It appears only as a leakage test.', n: n.leakageAgreement, unit: 'agreement' },
+    { name: 'Coverage', status: 'Quarantined', naive: 'Some flight-hours have no observation available by the decision time.', fix: 'Quarantine as no timely observation.', n: data.funnel.reasons.find((r) => r.key === 'no_observation_at_decision_time')?.count ?? 0, unit: 'no timely row' },
   ]
   return (
-    <Card eyebrow="Naive vs repaired" title="Nine ways the raw feed misleads, measured">
+    <Card eyebrow="Checks" title="Feed checks">
       <div className="rp-defects">
-        <div className="rp-dh"><span>Defect</span><span>What a naive pipeline does</span><span>What we do</span><span style={{ textAlign: 'right' }}>Measured</span></div>
+        <div className="rp-dh"><span>Check</span><span>Measured</span><span>Rule applied</span><span>Status</span></div>
         {rows.map((r) => (
           <div className="rp-d" key={r.name}>
             <b>{r.name}</b>
-            <span className="rp-d__naive">{r.naive}</span>
-            <span className="rp-d__fix">{r.fix}</span>
             <span className="rp-d__n">{typeof r.n === 'number' ? num(r.n, 0) : r.n}<small>{r.unit}</small></span>
+            <span className="rp-d__fix">{r.fix}</span>
+            <span><Pill tone={r.status === 'Pass' ? 'green' : r.status === 'Quarantined' ? 'coral' : 'navy'}>{r.status}</Pill></span>
           </div>
         ))}
       </div>
-      <Note>
-        A dashboard on the raw feed shows these errors faster. Counts are measured on the lab tables ({num(n.rawRows, 0)} raw rows,
-        {' '}{num(n.nonNormalRows, 0)} with non-normal keys), not estimated.
-      </Note>
+      <Note>Measured on the lab tables ({num(n.rawRows, 0)} raw rows, {num(n.nonNormalRows, 0)} with non-normal keys).</Note>
     </Card>
   )
 }
@@ -106,24 +103,19 @@ function Defects() {
 function GenieCallout() {
   const n = data.naive
   return (
-    <Card eyebrow="Same question, two answers" title="How many rows arrive after the decision time?">
+    <Card eyebrow="Known pitfall" title="Genie on raw tables undercounts late rows">
       <div className="rp-vs">
         <div className="rp-vs__box rp-vs__box--bad">
-          <div className="eyebrow eyebrow--plain">Vanilla Genie on raw tables</div>
+          <div className="eyebrow eyebrow--plain">Raw tables</div>
           <div className="rp-vs__big mono">{num(n.genieNaiveLate, 0)}</div>
-          <p className="rp-explain">It joined on raw keys, so it missed most of the late rows.</p>
         </div>
         <span className="rp-vs__arrow" aria-hidden>→</span>
         <div className="rp-vs__box rp-vs__box--good">
           <div className="eyebrow eyebrow--plain">After key repair</div>
           <div className="rp-vs__big mono">{num(n.lateRows, 0)}</div>
-          <p className="rp-explain">Late revisions, available about {num(n.lateMedianHours, 0)} h after the decision time.</p>
         </div>
       </div>
-      <p className="rp-explain" style={{ marginTop: 10 }}>{data.genieFindings}</p>
-      <Note>
-        This is a data-trust point, not a model result. The data team asks Genie on the repaired tables instead.
-      </Note>
+      <p className="rp-explain" style={{ marginTop: 10 }}>Late revisions, about {num(n.lateMedianHours, 0)} h after decision time. Raw-key join misses most of them. Ask Genie on the repaired tables.</p>
     </Card>
   )
 }
@@ -157,7 +149,7 @@ function Lineage_() {
   return (
     <Card
       eyebrow="Lineage explorer"
-      title="Follow one flight-hour from raw rows to verdict"
+      title="Flight-hour lineage"
       right={
         <Seg
           options={[
@@ -373,7 +365,7 @@ function Timeline({ rec, rejected, reasonInfo }: { rec: Rec; rejected: boolean; 
 function Findings() {
   const [open, setOpen] = useState<number | null>(0)
   return (
-    <Card eyebrow="Findings" title="Issues found, how we tested them, what we did">
+    <Card eyebrow="Findings" title="Findings log">
       {data.findings.map((f, i) => (
         <div key={i} className={'rp-fr' + (open === i ? ' is-open' : '')}>
           <button className="rp-fr__head" aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)}>
@@ -395,21 +387,17 @@ function Findings() {
 export default function Repair() {
   const n = data.naive
   return (
-    <Page
-      eyebrow="Evidence · signal repair"
-      title="Why would a faster dashboard still be wrong?"
-      lede={`Because the feed is late, revised and inconsistent at decision time: ${num(n.lateRows, 0)} revisions land about ${num(n.lateMedianHours, 0)} h after the decision and ${num(n.lostOnRawJoin, 0)} records are lost on raw keys. After repair, ${num(data.funnel.eligible, 0)} of ${num(data.funnel.expected, 0)} flight-hours are usable.`}
-    >
+    <Page eyebrow="Data team · signal repair" title="Feed health">
       <div className="grid4">
         <Stat label="Expected" value={num(data.funnel.expected, 0)} sub="flight-hours" />
-        <Stat label="Usable" value={num(data.funnel.eligible, 0)} sub="after point-in-time, unit and permission repair" tone="green" />
-        <Stat label="Quarantined" value={num(data.funnel.quarantined, 0)} sub="kept in the denominator" tone="coral" />
+        <Stat label="Usable" value={num(data.funnel.eligible, 0)} sub="after repair" tone="green" />
+        <Stat label="Quarantined" value={num(data.funnel.quarantined, 0)} sub="kept in denominator" tone="coral" />
         <Stat label="Late revisions" value={num(n.lateRows, 0)} sub={`about ${num(n.lateMedianHours, 0)} h after decision (measured)`} />
       </div>
-      <Funnel />
       <Defects />
-      <GenieCallout />
       <Lineage_ />
+      <Funnel />
+      <GenieCallout />
       <Findings />
     </Page>
   )

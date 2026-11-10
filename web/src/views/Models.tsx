@@ -16,25 +16,25 @@ const sy = (v: number) => H - P - v * (H - 2 * P)
 
 function Table() {
   return (
-    <Card eyebrow="MLflow" title="Four runs, scored on validation only">
+    <Card eyebrow="MLflow" title="Runs">
       <table className="tbl">
         <thead>
-          <tr><th>Model</th><th>Run</th><th>Accuracy</th><th>Balanced accuracy</th><th>AUC</th><th></th></tr>
+          <tr><th>Algorithm</th><th>Run id</th><th>Val. balanced accuracy</th><th>Accuracy</th><th>AUC</th><th></th></tr>
         </thead>
         <tbody>
           {data.models.map((m) => (
             <tr key={m.key} className={m.key === 'dummy' ? 'md-row--dummy' : m.isChampion ? 'is-on' : ''}>
               <td>{m.label} <span style={{ color: 'var(--faint)', fontSize: 12 }}>{m.algorithm}</span></td>
               <td className="mono">{shortId(m.runId, 8)}</td>
-              <td className="mono">{num(m.accuracy, 3)}</td>
               <td className="mono">{num(m.balancedAccuracy, 3)}</td>
+              <td className="mono">{num(m.accuracy, 3)}</td>
               <td className="mono">{num(m.auc, 3)}</td>
               <td>{m.isChampion && <Pill tone="green">Champion</Pill>}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <Note>All figures are on the 342 validation flight-hours. Blind outcomes are not known and are not shown.</Note>
+      <Note>Validation, 342 flight-hours. Blind outcomes are not shown.</Note>
     </Card>
   )
 }
@@ -49,7 +49,7 @@ function Roc() {
   })
   const labelOf = (k: string) => data.models.find((m) => m.key === k)?.label ?? k
   return (
-    <Card eyebrow="ROC" title="Catching disruptions versus false alarms">
+    <Card eyebrow="ROC" title="Disruptions caught vs false alarms">
       <svg
         className="md-svg"
         viewBox={`0 0 ${W} ${H}`}
@@ -150,7 +150,7 @@ function Calibration() {
     return acc.filter((b) => b.n > 0).map((b) => ({ n: b.n, pred: b.p / b.n, obs: b.y / b.n }))
   }, [key])
   return (
-    <Card eyebrow="Calibration" title="Does predicted risk match what happened?">
+    <Card eyebrow="Calibration" title="Predicted vs observed risk">
       <svg className="md-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Reliability chart, 10 bins on validation">
         {[0, 0.25, 0.5, 0.75, 1].map((g) => (
           <g key={g}>
@@ -179,7 +179,7 @@ function Coefs() {
   const items = champion ? data.champion.coef.map((c, i) => ({ c, f: feats[i] })) : []
   const max = Math.max(...items.map((i) => Math.abs(i.c)), 1e-9)
   return (
-    <Card eyebrow="Champion coefficients" title="Which standardised inputs push risk up or down">
+    <Card eyebrow="Champion coefficients" title="Standardised inputs">
       {items.map(({ c, f }) => (
         <div key={f.key} className="md-coef">
           <div>
@@ -208,7 +208,7 @@ function Coefs() {
 
 function Gates() {
   return (
-    <Card eyebrow="Gates" title="What is done and what the jury decides">
+    <Card eyebrow="Gates" title="Pilot gates">
       {gates.map((g) => (
         <div key={g.label} className="md-gate">
           <span className={'md-gate__tick' + (g.status === 'done' ? ' is-done' : '')}>{g.status === 'done' ? '✓' : ''}</span>
@@ -228,7 +228,7 @@ function Gates() {
 function Leakage() {
   const f = data.findings.find((x) => /resolved_outcome_hint/.test(x.issue + x.test + x.resolution))
   return (
-    <Card eyebrow="Leakage test" title="Was the outcome hint leaking into the model?">
+    <Card eyebrow="Leakage test" title="Outcome hint excluded">
       <p style={{ fontSize: 13, margin: 0 }}>
         <span className="mono">resolved_outcome_hint</span> was dropped from the features. As a test, a copy of the table
         had that column overwritten, and the model output stayed identical. It matched the label on {data.naive.leakageAgreement} labelled rows, so it is never used.
@@ -263,7 +263,7 @@ function Sweep() {
     { name: 'Balanced accuracy', color: '#17343d', f: (p) => p.b },
   ]
   return (
-    <Card eyebrow="Cut-off sweep" title="Precision, recall and balanced accuracy across cut-offs">
+    <Card eyebrow="Cut-off sweep" title="Metrics by cut-off">
       <svg
         className="md-sweep"
         viewBox={`0 0 ${W} ${H}`}
@@ -307,21 +307,17 @@ function Sweep() {
 
 export default function Models() {
   return (
-    <Page
-      eyebrow="Evidence · models"
-      title="Which model should we trust, and how far?"
-      lede="Four MLflow runs are compared on the same validation flight-hours. Move the cut-off to see how the champion trades disruptions caught against false alarms. Shorter turnaround buffers raise risk."
-    >
+    <Page eyebrow="Data team · MLflow" title="Model registry">
       <Table />
       <div className="grid2">
         <Roc />
         <Calibration />
       </div>
+      <Sweep />
       <div className="grid2">
         <Confusion />
         <Coefs />
       </div>
-      <Sweep />
       <div className="grid2">
         <Gates />
         <Leakage />

@@ -95,3 +95,30 @@
 .ops-tl { width: 100%; height: 56px; margin-top: 10px; background: var(--line-soft); border-radius: 4px; cursor: pointer; display: block; }
 .ops-issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
 .ops-issues li { display: grid; grid-template-columns: 90px 1fr auto; gap: 10px; font-size: 12px; padding: 6px 10px; border-left: 3px solid var(--muted); background: var(--line-soft); }
+
+/* shift console */
+.ops-page { max-width: none; }
+.ops-bar { position: sticky; top: 56px; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--line); margin: 0 -4px 14px; padding: 10px 4px; display: grid; gap: 8px; }
+.ops-bar__row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.ops-title { font-size: 20px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+.ops-bar .ops-clock { flex: 1; min-width: 260px; }
+.ops-chips { margin: 0; }
+.ops-ctl { width: 220px; }
+.ops-tlwrap { flex: 1; min-width: 240px; }
+.ops-tlwrap .ops-tl { height: 44px; margin: 0; }
+.ops-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+.ops-main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.ops-side { display: grid; gap: 16px; }
+.ops-tbl td, .ops-tbl th { white-space: nowrap; }
+.ops-tbl tr.is-ack { opacity: 0.45; }
+.ops-tbl tr.is-ack .ops-ack { opacity: 1; }
+.ops-cap-n { text-transform: capitalize; }
+.ops-ack { font-size: 12px; padding: 4px 10px; }
+.ops-ack.is-on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.ops-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; align-self: center; }
+.ops-scroll { max-height: 640px; }
+.ops-scrim { position: fixed; inset: 0; background: rgba(15, 25, 45, 0.25); z-index: 60; }
+.ops-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--paper); border-left: 1px solid var(--line); z-index: 61; overflow-y: auto; padding: 14px; box-shadow: -8px 0 30px rgba(0,0,0,0.12); }
+.ops-drawer__bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+@media (max-width: 1199px) { .ops-main { grid-template-columns: 1fr; } .ops-kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px) { .ops-kpis { grid-template-columns: repeat(2, 1fr); } .ops-ctl { width: 100%; } }

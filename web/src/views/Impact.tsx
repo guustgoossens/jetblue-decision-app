@@ -105,23 +105,19 @@ export default function Impact() {
     y === 1 ? (flagged ? C_TP : C_FN) : flagged ? C_FP : C_TN
 
   return (
-    <Page
-      eyebrow="Impact · CIO view"
-      title="What does the cut-off trade, and what is it worth?"
-      lede="The cut-off decides which flight-hours are flagged for intervention. Drag across the grid or move the slider: every figure is recomputed on the 342 validation flight-hours, whose outcomes are known. Dollar figures are a scenario on editable assumptions."
-    >
+    <Page title="Impact model">
       <section className="im-hero">
         <div className="im-hero__head">
-          <span className="eyebrow">Weekly scenario · editable assumptions, not a result</span>
+          <span className="eyebrow">Weekly scenario</span>
           <Pill tone="amber">Scenario</Pill>
         </div>
         <div className="im-hero__nums">
-          <div><b className="mono">{num(avoided, 1)}</b><span>fewer delays a week, against a target of {num(targetN, 0)}</span></div>
+          <div><b className="mono">{num(avoided, 1)}</b><span>fewer delays / week (target {num(targetN, 0)})</span></div>
           <div><b className="mono">{usd(weeklyNet)}</b><span>net value a week</span></div>
-          <div><b className="mono">{usd(weeklyNet * 52)}</b><span>a year (x 52), scenario only</span></div>
+          <div><b className="mono">{usd(weeklyNet * 52)}</b><span>a year (x 52)</span></div>
         </div>
         <div className="im-sens" aria-label="Sensitivity to prevent share">
-          <span className="eyebrow">Weekly value if the prevent share is</span>
+          <span className="eyebrow">Value if prevent share is</span>
           {[0.1, 0.2, 0.3, 0.5].map((p) => {
             const v = weeklyAt(p)
             return (
@@ -132,14 +128,12 @@ export default function Impact() {
             )
           })}
         </div>
-        <p className="im-hero__note">
-          Weekly net = {biz.delaysPerWeek} delays x recall {pct1(cm.recall)} x prevent share x cost per disruption, minus the interventions a week ({num(flagsPerWeek, 1)} flags: {num(flagsPerDisruption, 2)} flags per real disruption at this cut-off on validation, times {biz.delaysPerWeek} delays) x cost per intervention. Click a share to set it.
-        </p>
+        <p className="im-hero__note">Net = delays x recall x prevent share x cost per disruption, minus flags x cost per intervention. Click a share to set it.</p>
       </section>
 
       <div className="im-top">
         <Card
-          eyebrow="Validation flight-hours"
+          eyebrow="Validation"
           title="Sorted by risk, highest first"
           right={
             <Seg<M>
@@ -219,7 +213,7 @@ export default function Impact() {
         </div>
       </div>
 
-      <Card eyebrow="In plain words" title="Per 100 flight-hours at this cut-off">
+      <Card eyebrow="Validation" title="Per 100 flight-hours">
         <div className="im-plain">
           <div className="is-good"><b>{num(cm.tp * per100, 1)}</b><span>flagged and a disruption followed</span></div>
           <div className="is-amber"><b>{num(cm.fn * per100, 1)}</b><span>missed: a disruption came with no flag</span></div>
@@ -232,7 +226,7 @@ export default function Impact() {
       </Card>
 
       <div className="im-bottom">
-        <Card eyebrow="Scenario assumptions" title="Not measured, not from the customer" right={<Pill tone="amber">Editable</Pill>}>
+        <Card eyebrow="Scenario" title="Assumptions" right={<Pill tone="amber">Editable</Pill>}>
           <Slider
             label="Cost per intervention"
             value={a.interventionCost}
@@ -261,16 +255,16 @@ export default function Impact() {
             format={(v: number) => pct(v)}
           />
           <div className="im-value">
-            <span className="eyebrow">Scenario value per 100 flight-hours at {pct(cutoff)}</span>
+            <span className="eyebrow">Value per 100 flight-hours at {pct(cutoff)}</span>
             <b className="mono">{usd(value)}</b>
           </div>
           <ValueCurve curve={curve} cutoff={cutoff} be={be} best={bestVal} cur={value} />
           <Note>
-            Value = disruptions caught x prevent share x cost per disruption, minus flags x cost per intervention, on validation labels. Break-even cut-off = cost per intervention / (prevent share x cost per disruption) = {Number.isFinite(breakEven(a)) ? breakEven(a).toFixed(2) : 'n/a'}. The model predicts next-hour disruption risk. It does not show that an intervention prevents one; the prevent share is an assumption.
+            Break-even cut-off = {Number.isFinite(breakEven(a)) ? breakEven(a).toFixed(2) : 'n/a'}. Prevent share is an assumption; the model predicts risk only.
           </Note>
         </Card>
 
-        <Card eyebrow="Weekly scenario, anchored on discovery" title="Does this reach the 50% target?" right={<Pill tone="amber">Scenario</Pill>}>
+        <Card eyebrow="From discovery" title="Weekly target check" right={<Pill tone="amber">Scenario</Pill>}>
           <div className="im-stats">
             <Stat label="Delays per week today" value={String(biz.delaysPerWeek)} sub="from discovery" />
             <Stat label="Target reduction" value={pct(biz.targetReduction)} sub={`${num(targetN, 0)} fewer a week, from discovery`} />
@@ -281,12 +275,12 @@ export default function Impact() {
             <span><b className="mono">{num(avoided, 1)}</b> fewer delays a week, against a target of {num(targetN, 0)}.</span>
             <span>
               {meets
-                ? 'Under these assumptions the target is reachable at this cut-off.'
-                : `Under these assumptions the target is not reached. It needs recall x prevent share of at least ${pct(biz.targetReduction)}.`}
+                ? 'Target reachable at this cut-off (scenario).'
+                : `Target not reached; needs recall x prevent share of at least ${pct(biz.targetReduction)}.`}
             </span>
           </div>
           <Note>
-            A scenario, not a result. The 14 delays a week and the 50% target are customer answers from discovery; we apply recall and the prevent share to them as if every delay were a flagged-type disruption. The pilot against a matched control hub is what would measure it.
+            Scenario: 14 delays / week and the 50% target are from discovery. Only the pilot against a control hub measures it.
           </Note>
         </Card>
       </div>
